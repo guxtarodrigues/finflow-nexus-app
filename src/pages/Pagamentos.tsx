@@ -208,25 +208,40 @@ const Pagamentos = () => {
   useEffect(() => {
     switch (dateFilterMode) {
       case "current":
+        setCurrentDate(new Date());
         setDateRange({
-          from: startOfMonth(currentDate),
-          to: endOfMonth(currentDate)
+          from: startOfMonth(new Date()),
+          to: endOfMonth(new Date())
         });
         break;
       case "prev":
+        setCurrentDate(prevDate => subMonths(prevDate, 1));
         setDateRange({
           from: startOfMonth(subMonths(currentDate, 1)),
           to: endOfMonth(subMonths(currentDate, 1))
         });
         break;
       case "next":
+        setCurrentDate(prevDate => addMonths(prevDate, 1));
         setDateRange({
           from: startOfMonth(addMonths(currentDate, 1)),
           to: endOfMonth(addMonths(currentDate, 1))
         });
         break;
     }
-  }, [dateFilterMode, currentDate]);
+  }, [dateFilterMode]);
+
+  useEffect(() => {
+    if (dateFilterMode !== "custom") {
+      const monthStart = startOfMonth(currentDate);
+      const monthEnd = endOfMonth(currentDate);
+      
+      setDateRange({
+        from: monthStart,
+        to: monthEnd
+      });
+    }
+  }, [currentDate, dateFilterMode]);
 
   const fetchCategories = async () => {
     try {
@@ -531,7 +546,6 @@ const Pagamentos = () => {
       
       if (error) throw error;
       
-      // Create transaction record for the payment
       let categoryData = null;
       if (previousData.category_id) {
         const { data } = await supabase
