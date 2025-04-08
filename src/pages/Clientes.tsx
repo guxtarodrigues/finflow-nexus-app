@@ -181,7 +181,6 @@ const Clientes = () => {
         user_id: user.id
       };
       
-      // Step 1: Insert the client data
       const { data: clientResult, error: clientError } = await supabase
         .from('clients')
         .insert(clientData)
@@ -190,7 +189,6 @@ const Clientes = () => {
       
       if (clientError) throw clientError;
       
-      // Step 2: If client has recurring payment and monthly value, create a transaction
       if (newClient.recurring_payment && newClient.monthly_value && newClient.monthly_value > 0) {
         const currentDate = new Date();
         const transactionData = {
@@ -347,7 +345,6 @@ const Clientes = () => {
   
   const filteredClients = getFilteredClients();
   
-  // Calculate metrics
   const monthlyRevenue = clients
     .filter(client => client.status === 'active')
     .reduce((sum, client) => sum + (client.monthly_value || 0), 0);
@@ -892,3 +889,43 @@ const Clientes = () => {
                       <Button className="bg-fin-green text-black hover:bg-fin-green/90" onClick={handleUpdateClient}>
                         Salvar alterações
                       </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+                <TabsContent value="transactions" className="mt-4">
+                  {selectedClient && (
+                    <ClientTransactionsList clientId={selectedClient.id} />
+                  )}
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+      
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent className="bg-[#1A1A1E] border-[#2A2A2E] text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. Isso excluirá permanentemente o cliente e todas as suas informações.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-[#1F1F23] border-[#2A2A2E]">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => selectedClient && handleDeleteClient(selectedClient.id)}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+export default Clientes;
