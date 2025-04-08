@@ -36,7 +36,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Define the Payment type
 interface Payment {
@@ -81,6 +82,7 @@ const Pagamentos = () => {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
+  const { user } = useAuth();
   
   // New payment form state
   const [newPayment, setNewPayment] = useState({
@@ -96,17 +98,22 @@ const Pagamentos = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchPayments();
-  }, [filterStatus]);
+    if (user) {
+      fetchPayments();
+    }
+  }, [filterStatus, user]);
 
   const fetchPayments = async () => {
     try {
+      if (!user) return;
+      
       setLoading(true);
       
       // Start building the query
       let query = supabase
         .from('payments')
         .select('*')
+        .eq('user_id', user.id)
         .order('due_date', { ascending: true });
       
       // Apply filter if set
@@ -118,8 +125,13 @@ const Pagamentos = () => {
       
       if (error) throw error;
       
+      if (!data) {
+        setPayments([]);
+        return;
+      }
+      
       // Format the payments data
-      const formattedPayments = data.map((item) => ({
+      const formattedPayments = data.map((item: any) => ({
         id: item.id,
         due_date: format(new Date(item.due_date), 'dd/MM/yyyy'),
         description: item.description,
@@ -145,6 +157,8 @@ const Pagamentos = () => {
 
   const handleCreatePayment = async () => {
     try {
+      if (!user) return;
+      
       if (!newPayment.description || !newPayment.recipient || !newPayment.value || !newPayment.due_date) {
         toast({
           title: "Dados incompletos",
@@ -154,7 +168,7 @@ const Pagamentos = () => {
         return;
       }
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('payments')
         .insert([
           {
@@ -164,10 +178,10 @@ const Pagamentos = () => {
             due_date: new Date(newPayment.due_date),
             payment_method: newPayment.payment_method,
             recurrence: newPayment.recurrence,
-            status: newPayment.status
+            status: newPayment.status,
+            user_id: user.id
           }
-        ])
-        .select();
+        ]);
 
       if (error) throw error;
       

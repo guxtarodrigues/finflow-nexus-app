@@ -33,6 +33,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Define the Transaction type
 interface Transaction {
@@ -51,6 +52,7 @@ const Movimentacoes = () => {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [filterType, setFilterType] = useState<string | null>(null);
+  const { user } = useAuth();
   
   // New transaction form state
   const [newTransaction, setNewTransaction] = useState({
@@ -63,17 +65,22 @@ const Movimentacoes = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchTransactions();
-  }, [filterType]);
+    if (user) {
+      fetchTransactions();
+    }
+  }, [filterType, user]);
 
   const fetchTransactions = async () => {
     try {
+      if (!user) return;
+      
       setLoading(true);
       
       // Start building the query
       let query = supabase
         .from('transactions')
         .select('*')
+        .eq('user_id', user.id)
         .order('date', { ascending: false });
       
       // Apply filter if set
@@ -87,8 +94,13 @@ const Movimentacoes = () => {
       
       if (error) throw error;
       
+      if (!data) {
+        setTransactions([]);
+        return;
+      }
+      
       // Format the transactions data
-      const formattedTransactions = data.map((item) => ({
+      const formattedTransactions = data.map((item: any) => ({
         id: item.id,
         date: format(new Date(item.date), 'dd/MM/yyyy'),
         description: item.description,
@@ -113,6 +125,8 @@ const Movimentacoes = () => {
 
   const handleCreateTransaction = async () => {
     try {
+      if (!user) return;
+      
       if (!newTransaction.description || !newTransaction.category || !newTransaction.value) {
         toast({
           title: "Dados incompletos",
@@ -122,7 +136,7 @@ const Movimentacoes = () => {
         return;
       }
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('transactions')
         .insert([
           {
@@ -131,10 +145,10 @@ const Movimentacoes = () => {
             type: newTransaction.type,
             value: Number(newTransaction.value),
             date: new Date(),
-            status: 'completed'
+            status: 'completed',
+            user_id: user.id
           }
-        ])
-        .select();
+        ]);
 
       if (error) throw error;
       
