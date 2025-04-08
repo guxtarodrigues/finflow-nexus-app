@@ -379,7 +379,6 @@ const Clientes = () => {
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Monthly Revenue */}
         <MetricCard
           title="Receita Mensal"
           value={formatCurrency(monthlyRevenue)}
@@ -387,7 +386,6 @@ const Clientes = () => {
           icon="income"
         />
         
-        {/* Yearly Revenue */}
         <MetricCard
           title="Receita Anual"
           value={formatCurrency(yearlyRevenue)}
@@ -395,7 +393,6 @@ const Clientes = () => {
           icon="savings"
         />
         
-        {/* Active Clients */}
         <MetricCard
           title="Clientes Ativos"
           value={activeClientsCount.toString()}
@@ -892,4 +889,6 @@ const Clientes = () => {
                       <Button variant="outline" onClick={() => setIsEditSheetOpen(false)}>
                         Cancelar
                       </Button>
-                      <Button className="bg-fin-green text-black hover:bg-fin-
+                      <Button className="bg-fin-green text-black hover:bg-fin-green/90" onClick={handleUpdateClient}>
+                        Salvar alterações
+                      </Button>
