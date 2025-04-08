@@ -16,6 +16,7 @@ interface DateFilterProps {
   onNextMonth: () => void;
   onCurrentMonth: () => void;
   onDateRangeChange: (range: { from: Date; to: Date }) => void;
+  currentDate: Date; // Added to access the current view date
 }
 
 export const DateFilter = ({
@@ -24,13 +25,15 @@ export const DateFilter = ({
   onPrevMonth,
   onNextMonth,
   onCurrentMonth,
-  onDateRangeChange
+  onDateRangeChange,
+  currentDate // Use the current view date
 }: DateFilterProps) => {
   
   // Format date range for display
   const formatDateRange = () => {
     if (dateFilterMode === "current" || dateFilterMode === "prev" || dateFilterMode === "next") {
-      return `${format(dateRange.from, 'MMMM yyyy')}`;
+      // Use currentDate for displaying the month name in the selector
+      return `${format(currentDate, 'MMMM yyyy')}`;
     } else {
       return `${format(dateRange.from, 'dd/MM/yyyy')} - ${format(dateRange.to, 'dd/MM/yyyy')}`;
     }

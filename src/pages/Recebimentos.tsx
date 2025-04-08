@@ -251,7 +251,6 @@ const Recebimentos = () => {
         .gte('date', dateRange.from.toISOString())
         .lte('date', dateRange.to.toISOString());
       
-      // Apply status filter if set
       if (filterStatus) {
         query = query.eq('status', filterStatus);
       }
@@ -287,7 +286,6 @@ const Recebimentos = () => {
               clientsMap.set(client.id, { id: client.id, name: client.name });
             });
             
-            // Process contract-based recurrent income
             const processedReceipts: Receipt[] = [];
             
             for (const client of clientsData) {
@@ -298,9 +296,7 @@ const Recebimentos = () => {
                 let currentDate = new Date(contractStartDate);
                 let paymentCount = 0;
                 
-                // Generate monthly payments from contract start until contract end or 24 months
                 while (currentDate <= contractEndDate && paymentCount < 24) {
-                  // Only include if it falls within our date range
                   if (currentDate >= dateRange.from && currentDate <= dateRange.to) {
                     processedReceipts.push({
                       id: `contract-${client.id}-${format(currentDate, 'yyyy-MM')}`,
@@ -326,7 +322,6 @@ const Recebimentos = () => {
               }
             }
             
-            // Also process recurring transactions from already added transactions
             for (const transaction of typedTransactions) {
               if (transaction.recurrence && transaction.recurrence !== 'once') {
                 const getMonthsToAdd = (recurrenceType: string) => {
@@ -345,11 +340,9 @@ const Recebimentos = () => {
                 if (monthsToAdd > 0) {
                   const originalDate = new Date(transaction.date);
                   
-                  // Generate up to 24 future occurrences
                   for (let i = 1; i <= 24; i++) {
                     const futureDate = addMonths(originalDate, monthsToAdd * i);
                     
-                    // Only include if it falls within our date range
                     if (futureDate >= dateRange.from && futureDate <= dateRange.to) {
                       const client = transaction.client_id ? clientsMap.get(transaction.client_id) : null;
                       
@@ -375,7 +368,6 @@ const Recebimentos = () => {
               }
             }
             
-            // Add these to our list for display
             const receiptTransactions: Transaction[] = processedReceipts.map(receipt => ({
               ...receipt,
               type: 'income',
@@ -392,7 +384,6 @@ const Recebimentos = () => {
         }
       }
       
-      // Also fetch payment data for completed payments received (representing income)
       let paymentsData: any[] = [];
       
       try {
@@ -410,10 +401,8 @@ const Recebimentos = () => {
         }
       } catch (error) {
         console.error('Error fetching payments:', error);
-        // Continue without payments data
       }
       
-      // Format the transactions into receipts
       const formattedTransactions = typedTransactions.map((item) => {
         const client = item.client_id ? clientsMap.get(item.client_id) : null;
         
@@ -435,7 +424,6 @@ const Recebimentos = () => {
         };
       });
       
-      // Format the payments into receipts
       const formattedPayments = paymentsData.map((payment) => {
         const client = payment.client_id ? clientsMap.get(payment.client_id) : null;
         
@@ -446,7 +434,7 @@ const Recebimentos = () => {
           category: payment.category || 'Pagamento',
           category_id: payment.category_id || '',
           value: Number(payment.value),
-          status: 'completed', // All included payments are completed
+          status: 'completed',
           client_id: payment.client_id || undefined,
           client_name: client ? client.name : payment.recipient,
           source: 'payment',
@@ -457,15 +445,12 @@ const Recebimentos = () => {
         };
       });
       
-      // Combine all receipts
-      let allReceipts = [...formattedTransactions, ...formattedPayments];
+      const allReceipts = [...formattedTransactions, ...formattedPayments];
       
-      // Apply source filter if set
       if (filterSource) {
         allReceipts = allReceipts.filter(receipt => receipt.source === filterSource);
       }
       
-      // Sort by date (newest first)
       allReceipts.sort((a, b) => {
         const dateA = new Date(a.date.split('/').reverse().join('-'));
         const dateB = new Date(b.date.split('/').reverse().join('-'));
@@ -663,7 +648,6 @@ const Recebimentos = () => {
   };
 
   const openEditDialog = (receipt: Receipt) => {
-    // Only allow editing transactions, not payments
     if (receipt.source === 'payment') {
       toast({
         title: "Edição não permitida",
@@ -1023,6 +1007,7 @@ const Recebimentos = () => {
                     onNextMonth={handleNextMonth}
                     onCurrentMonth={handleCurrentMonth}
                     onDateRangeChange={handleDateRangeChange}
+                    currentDate={currentDate}
                   />
                   
                   <DropdownMenu>
