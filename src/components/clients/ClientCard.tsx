@@ -93,7 +93,7 @@ export const ClientCard = ({ client, onEdit, onDelete, onStatusChange }: ClientC
 
       if (transactionError) throw transactionError;
       
-      // Update client payment status - Modified this part to fix the type error
+      // Update client payment status
       const { error: clientError } = await supabase
         .from('clients')
         .update({
