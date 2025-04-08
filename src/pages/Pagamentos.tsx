@@ -48,7 +48,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { format, startOfMonth, endOfMonth, subMonths, addMonths, parseISO, isWithinInterval } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, addMonths, parseISO, isWithinInterval, parse } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -195,6 +195,20 @@ const Pagamentos = () => {
   }>({});
   
   const { toast } = useToast();
+
+  // Updated state for the edit payment form
+  const [editPayment, setEditPayment] = useState({
+    id: "",
+    description: "",
+    recipient: "",
+    client_id: "",
+    category_id: "",
+    value: "",
+    due_date: format(new Date(), "yyyy-MM-dd"),
+    payment_method: "Transferência",
+    recurrence: "Mensal",
+    status: "pending"
+  });
 
   useEffect(() => {
     if (user) {
@@ -422,6 +436,22 @@ const Pagamentos = () => {
       });
     }
   };
+  
+  const handleEditClientChange = (clientId: string) => {
+    const selectedClient = clients.find(client => client.id === clientId);
+    if (selectedClient) {
+      setEditPayment({
+        ...editPayment,
+        client_id: clientId,
+        recipient: selectedClient.name
+      });
+    } else {
+      setEditPayment({
+        ...editPayment,
+        client_id: clientId
+      });
+    }
+  };
 
   const handleAddPayment = async () => {
     try {
@@ -492,6 +522,69 @@ const Pagamentos = () => {
       console.error('Error adding payment:', error);
       toast({
         title: "Erro ao adicionar pagamento",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+  
+  const handleUpdatePayment = async () => {
+    try {
+      if (!user) return;
+      
+      const errors: {
+        description?: boolean;
+        recipient?: boolean;
+        value?: boolean;
+        due_date?: boolean;
+      } = {};
+      
+      if (!editPayment.description) errors.description = true;
+      if (!editPayment.recipient) errors.recipient = true;
+      if (!editPayment.value) errors.value = true;
+      if (!editPayment.due_date) errors.due_date = true;
+      
+      if (Object.keys(errors).length > 0) {
+        setFormErrors(errors);
+        toast({
+          title: "Campos obrigatórios",
+          description: "Preencha todos os campos destacados em vermelho para continuar.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      setFormErrors({});
+      
+      const { error } = await supabase
+        .from('payments')
+        .update({
+          description: editPayment.description,
+          recipient: editPayment.recipient,
+          client_id: editPayment.client_id || null,
+          category_id: editPayment.category_id || null,
+          value: parseFloat(editPayment.value.toString()),
+          due_date: editPayment.due_date,
+          payment_method: editPayment.payment_method,
+          recurrence: editPayment.recurrence,
+          status: editPayment.status
+        })
+        .eq('id', editPayment.id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Pagamento atualizado",
+        description: "O pagamento foi atualizado com sucesso.",
+      });
+      
+      setIsUpdateSheetOpen(false);
+      fetchPayments();
+      calculateDashboardData();
+    } catch (error: any) {
+      console.error('Error updating payment:', error);
+      toast({
+        title: "Erro ao atualizar pagamento",
         description: error.message,
         variant: "destructive"
       });
@@ -581,6 +674,24 @@ const Pagamentos = () => {
       style: 'currency', 
       currency: 'BRL' 
     });
+  };
+  
+  const openEditSheet = (payment: Payment) => {
+    // Convert the payment format to the edit form format
+    setEditPayment({
+      id: payment.id,
+      description: payment.description,
+      recipient: payment.recipient,
+      client_id: "", // We'll need to find the client ID if available
+      category_id: payment.category_id || "",
+      value: payment.value.toString(),
+      due_date: format(parse(payment.due_date, 'dd/MM/yyyy', new Date()), 'yyyy-MM-dd'),
+      payment_method: payment.payment_method,
+      recurrence: payment.recurrence,
+      status: payment.status
+    });
+    
+    setIsUpdateSheetOpen(true);
   };
 
   return (
@@ -839,538 +950,3 @@ const Pagamentos = () => {
                       <SelectContent>
                         <SelectItem value="pending">Pendente</SelectItem>
                         <SelectItem value="completed">Pago</SelectItem>
-                        <SelectItem value="overdue">Atrasado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setIsDialogOpen(false);
-                    setFormErrors({});
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button 
-                  className="bg-fin-green text-black hover:bg-fin-green/90" 
-                  onClick={handleAddPayment}
-                >
-                  Adicionar
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full sm:w-auto">
-                <Download className="mr-2 h-4 w-4" />
-                Exportar
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem>
-                Excel
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                PDF
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              <div className="flex items-center">
-                <div className="mr-2 p-2 bg-amber-500/10 rounded">
-                  <Clock className="h-4 w-4 text-amber-500" />
-                </div>
-                Pagamentos Pendentes
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalPending)}</div>
-            <p className="text-xs text-muted-foreground">
-              {payments.filter(p => p.status === 'pending').length} pagamentos pendentes
-            </p>
-            <div className="mt-4">
-              <span className="text-xs font-medium inline-flex items-center">
-                <CalendarCheck className="h-3 w-3 mr-1" /> {dashboardData.upcomingPayments} pagamentos nos próximos 7 dias
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              <div className="flex items-center">
-                <div className="mr-2 p-2 bg-fin-green/10 rounded">
-                  <Check className="h-4 w-4 text-fin-green" />
-                </div>
-                Pagamentos Realizados
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalPaid)}</div>
-            <p className="text-xs text-muted-foreground">
-              {payments.filter(p => p.status === 'completed').length} pagamentos realizados no mês
-            </p>
-            <div className="mt-4">
-              <span className="text-xs font-medium inline-flex items-center">
-                <DollarSign className="h-3 w-3 mr-1" /> {formatCurrency(dashboardData.totalPaid / (payments.filter(p => p.status === 'completed').length || 1))} valor médio por pagamento
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              <div className="flex items-center">
-                <div className="mr-2 p-2 bg-fin-red/10 rounded">
-                  <AlertCircle className="h-4 w-4 text-fin-red" />
-                </div>
-                Pagamentos Atrasados
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalOverdue)}</div>
-            <p className="text-xs text-muted-foreground">
-              {payments.filter(p => p.status === 'overdue').length} pagamentos atrasados no mês
-            </p>
-            <div className="mt-4">
-              <span className="text-xs font-medium inline-flex items-center">
-                <RefreshCw className="h-3 w-3 mr-1" /> {dashboardData.totalRecurring} pagamentos recorrentes
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row gap-4 justify-between">
-          <div className="flex items-center space-x-2">
-            <DateFilter 
-              dateRange={dateRange}
-              dateFilterMode={dateFilterMode}
-              onPrevMonth={() => setDateFilterMode("prev")}
-              onNextMonth={() => setDateFilterMode("next")}
-              onCurrentMonth={() => setDateFilterMode("current")}
-              onDateRangeChange={(range) => {
-                setDateRange(range);
-                setDateFilterMode("custom");
-              }}
-              currentDate={currentDate}
-            />
-          </div>
-          
-          <div className="flex space-x-2">
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Buscar pagamentos..."
-                className="pl-8 bg-[#1F1F23] border-[#2A2A2E]"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            
-            <Button
-              variant="outline"
-              size="icon"
-              className="border-[#2A2A2E] bg-[#1F1F23]"
-              onClick={() => setViewMode(viewMode === "list" ? "calendar" : "list")}
-            >
-              {viewMode === "list" ? <Calendar className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
-        
-        <Tabs 
-          defaultValue="all" 
-          className="w-full" 
-          value={activeTab}
-          onValueChange={(value) => {
-            setActiveTab(value);
-            if (value === "all") {
-              setFilterStatus(null);
-            } else if (value === "pending") {
-              setFilterStatus("pending");
-            } else if (value === "completed") {
-              setFilterStatus("completed");
-            } else if (value === "overdue") {
-              setFilterStatus("overdue");
-            }
-          }}
-        >
-          <TabsList className="mb-4 bg-[#1F1F23]">
-            <TabsTrigger value="all">Todos</TabsTrigger>
-            <TabsTrigger value="pending">Pendentes</TabsTrigger>
-            <TabsTrigger value="completed">Pagos</TabsTrigger>
-            <TabsTrigger value="overdue">Atrasados</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="all" className="mt-0">
-            {viewMode === "list" ? (
-              <div className="rounded-xl border border-[#2A2A2E] bg-[#1A1A1E]">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Destinatário</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Recorrência</TableHead>
-                      <TableHead>Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="h-24 text-center">
-                          <div className="flex justify-center items-center h-full">
-                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                            <span className="ml-2 text-muted-foreground">Carregando pagamentos...</span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : payments.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="h-24 text-center">
-                          <div className="flex flex-col justify-center items-center h-full">
-                            <CreditCard className="h-10 w-10 text-muted-foreground mb-2" />
-                            <p className="text-muted-foreground">Nenhum pagamento encontrado</p>
-                            <Button 
-                              variant="outline" 
-                              className="mt-2"
-                              onClick={() => setIsDialogOpen(true)}
-                            >
-                              <Plus className="mr-2 h-4 w-4" />
-                              Adicionar Pagamento
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      payments
-                        .filter(payment => 
-                          payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          payment.recipient.toLowerCase().includes(searchTerm.toLowerCase())
-                        )
-                        .map((payment) => (
-                          <TableRow key={payment.id} className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
-                            <TableCell>{payment.description}</TableCell>
-                            <TableCell>{payment.recipient}</TableCell>
-                            <TableCell>{payment.due_date}</TableCell>
-                            <TableCell>{formatCurrency(payment.value)}</TableCell>
-                            <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                            <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
-                            <TableCell>
-                              <div className="flex space-x-2">
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
-                                  onClick={() => {
-                                    setSelectedPayment(payment);
-                                    setIsUpdateSheetOpen(true);
-                                  }}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                {payment.status !== 'completed' && (
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
-                                    onClick={() => handleMarkAsPaid(payment.id)}
-                                  >
-                                    <CheckCircle className="h-4 w-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <PaymentCalendarView 
-                payments={payments} 
-                currentDate={currentDate}
-              />
-            )}
-          </TabsContent>
-          
-          <TabsContent value="pending" className="mt-0">
-            {viewMode === "list" ? (
-              <div className="rounded-xl border border-[#2A2A2E] bg-[#1A1A1E]">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Destinatário</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Recorrência</TableHead>
-                      <TableHead>Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="h-24 text-center">
-                          <div className="flex justify-center items-center h-full">
-                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                            <span className="ml-2 text-muted-foreground">Carregando pagamentos...</span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : payments.filter(p => p.status === 'pending').length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="h-24 text-center">
-                          <div className="flex flex-col justify-center items-center h-full">
-                            <CreditCard className="h-10 w-10 text-muted-foreground mb-2" />
-                            <p className="text-muted-foreground">Nenhum pagamento pendente encontrado</p>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      payments
-                        .filter(payment => 
-                          payment.status === 'pending' &&
-                          (payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          payment.recipient.toLowerCase().includes(searchTerm.toLowerCase()))
-                        )
-                        .map((payment) => (
-                          <TableRow key={payment.id} className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
-                            <TableCell>{payment.description}</TableCell>
-                            <TableCell>{payment.recipient}</TableCell>
-                            <TableCell>{payment.due_date}</TableCell>
-                            <TableCell>{formatCurrency(payment.value)}</TableCell>
-                            <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                            <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
-                            <TableCell>
-                              <div className="flex space-x-2">
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
-                                  onClick={() => {
-                                    setSelectedPayment(payment);
-                                    setIsUpdateSheetOpen(true);
-                                  }}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
-                                  onClick={() => handleMarkAsPaid(payment.id)}
-                                >
-                                  <CheckCircle className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <PaymentCalendarView 
-                payments={payments.filter(p => p.status === 'pending')} 
-                currentDate={currentDate}
-              />
-            )}
-          </TabsContent>
-          
-          <TabsContent value="completed" className="mt-0">
-            {viewMode === "list" ? (
-              <div className="rounded-xl border border-[#2A2A2E] bg-[#1A1A1E]">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Destinatário</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Recorrência</TableHead>
-                      <TableHead>Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="h-24 text-center">
-                          <div className="flex justify-center items-center h-full">
-                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                            <span className="ml-2 text-muted-foreground">Carregando pagamentos...</span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : payments.filter(p => p.status === 'completed').length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="h-24 text-center">
-                          <div className="flex flex-col justify-center items-center h-full">
-                            <CreditCard className="h-10 w-10 text-muted-foreground mb-2" />
-                            <p className="text-muted-foreground">Nenhum pagamento realizado encontrado</p>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      payments
-                        .filter(payment => 
-                          payment.status === 'completed' &&
-                          (payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          payment.recipient.toLowerCase().includes(searchTerm.toLowerCase()))
-                        )
-                        .map((payment) => (
-                          <TableRow key={payment.id} className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
-                            <TableCell>{payment.description}</TableCell>
-                            <TableCell>{payment.recipient}</TableCell>
-                            <TableCell>{payment.due_date}</TableCell>
-                            <TableCell>{formatCurrency(payment.value)}</TableCell>
-                            <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                            <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
-                            <TableCell>
-                              <div className="flex space-x-2">
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
-                                  onClick={() => {
-                                    setSelectedPayment(payment);
-                                    setIsUpdateSheetOpen(true);
-                                  }}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <PaymentCalendarView 
-                payments={payments.filter(p => p.status === 'completed')} 
-                currentDate={currentDate}
-              />
-            )}
-          </TabsContent>
-          
-          <TabsContent value="overdue" className="mt-0">
-            {viewMode === "list" ? (
-              <div className="rounded-xl border border-[#2A2A2E] bg-[#1A1A1E]">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Destinatário</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Recorrência</TableHead>
-                      <TableHead>Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="h-24 text-center">
-                          <div className="flex justify-center items-center h-full">
-                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                            <span className="ml-2 text-muted-foreground">Carregando pagamentos...</span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : payments.filter(p => p.status === 'overdue').length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="h-24 text-center">
-                          <div className="flex flex-col justify-center items-center h-full">
-                            <CreditCard className="h-10 w-10 text-muted-foreground mb-2" />
-                            <p className="text-muted-foreground">Nenhum pagamento atrasado encontrado</p>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      payments
-                        .filter(payment => 
-                          payment.status === 'overdue' &&
-                          (payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          payment.recipient.toLowerCase().includes(searchTerm.toLowerCase()))
-                        )
-                        .map((payment) => (
-                          <TableRow key={payment.id} className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
-                            <TableCell>{payment.description}</TableCell>
-                            <TableCell>{payment.recipient}</TableCell>
-                            <TableCell>{payment.due_date}</TableCell>
-                            <TableCell>{formatCurrency(payment.value)}</TableCell>
-                            <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                            <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
-                            <TableCell>
-                              <div className="flex space-x-2">
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
-                                  onClick={() => {
-                                    setSelectedPayment(payment);
-                                    setIsUpdateSheetOpen(true);
-                                  }}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
-                                  onClick={() => handleMarkAsPaid(payment.id)}
-                                >
-                                  <CheckCircle className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <PaymentCalendarView 
-                payments={payments.filter(p => p.status === 'overdue')} 
-                currentDate={currentDate}
-              />
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
-  );
-};
-
-export default Pagamentos;
