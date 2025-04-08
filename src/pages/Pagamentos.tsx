@@ -1,1684 +1,481 @@
 
 import { useState, useEffect } from "react";
 import { 
-  CreditCard, 
-  ChevronDown, 
-  Download, 
-  Filter, 
-  Plus, 
-  Search, 
-  Trash2,
-  CalendarDays,
-  Check,
-  Clock,
-  AlertCircle,
-  Loader2,
-  Repeat,
-  Banknote,
-  ArrowRight,
-  LayoutGrid,
-  Users,
-  Calendar,
-  CalendarIcon,
-  Tag,
-  RefreshCw,
-  DollarSign,
-  CalendarCheck,
-  Edit,
-  CheckCircle
+  ArrowLeftRight, 
+  CalendarRange, 
+  Clock, 
+  MoreHorizontal, 
+  PlusCircle, 
+  Search 
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { format, startOfMonth, endOfMonth, subMonths, addMonths, parseISO, isWithinInterval, parse } from "date-fns";
-import { useAuth } from "@/contexts/AuthContext";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { PaymentCalendarView } from "@/components/payments/PaymentCalendarView";
-import { DateFilter } from "@/components/payments/DateFilter";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
+import { TransactionList } from "@/components/transactions/TransactionList";
+import { useToast } from "@/hooks/use-toast";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { format } from "date-fns";
 
-interface Payment {
-  id: string;
-  due_date: string;
-  description: string;
-  recipient: string;
-  value: number;
-  status: string;
-  payment_method: string;
-  recurrence: string;
-  category_id?: string;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  type: "income" | "expense" | "investment";
-  color: string;
-}
-
-interface Client {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-}
-
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case "completed":
-      return (
-        <Badge variant="outline" className="bg-fin-green/20 text-fin-green border-0">
-          <Check className="mr-1 h-3 w-3" /> Pago
-        </Badge>
-      );
-    case "pending":
-      return (
-        <Badge variant="outline" className="bg-amber-500/20 text-amber-500 border-0">
-          <Clock className="mr-1 h-3 w-3" /> Pendente
-        </Badge>
-      );
-    case "overdue":
-      return (
-        <Badge variant="outline" className="bg-fin-red/20 text-fin-red border-0">
-          <AlertCircle className="mr-1 h-3 w-3" /> Atrasado
-        </Badge>
-      );
-    default:
-      return null;
-  }
-};
-
-const getRecurrenceBadge = (recurrence: string) => {
-  switch (recurrence) {
-    case "Mensal":
-      return (
-        <Badge variant="outline" className="bg-blue-500/20 text-blue-500 border-0">
-          <Repeat className="mr-1 h-3 w-3" /> Mensal
-        </Badge>
-      );
-    case "Trimestral":
-      return (
-        <Badge variant="outline" className="bg-violet-500/20 text-violet-500 border-0">
-          <Repeat className="mr-1 h-3 w-3" /> Trimestral
-        </Badge>
-      );
-    case "Anual":
-      return (
-        <Badge variant="outline" className="bg-indigo-500/20 text-indigo-500 border-0">
-          <Repeat className="mr-1 h-3 w-3" /> Anual
-        </Badge>
-      );
-    case "Único":
-      return (
-        <Badge variant="outline" className="bg-gray-500/20 text-gray-500 border-0">
-          <Banknote className="mr-1 h-3 w-3" /> Único
-        </Badge>
-      );
-    default:
-      return null;
-  }
-};
+const FormSchema = z.object({
+  description: z.string().min(3, { message: "A descrição deve ter pelo menos 3 caracteres" }),
+  date: z.date(),
+  dueDate: z.date().optional(),
+  value: z.coerce.number().positive({ message: "O valor deve ser positivo" }),
+  category: z.string().min(1, { message: "Selecione uma categoria" }),
+  status: z.string().min(1, { message: "Selecione um status" }),
+  paymentMethod: z.string().min(1, { message: "Selecione um método de pagamento" }),
+  recipient: z.string().min(3, { message: "O destinatário deve ter pelo menos 3 caracteres" }),
+  recurrence: z.string().default("once"),
+});
 
 const Pagamentos = () => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [categories, setCategories] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingCategories, setLoadingCategories] = useState(true);
-  const [loadingClients, setLoadingClients] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("all");
-  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
-  const [isUpdateSheetOpen, setIsUpdateSheetOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
-  const [dashboardData, setDashboardData] = useState({
-    totalPending: 0,
-    totalPaid: 0,
-    totalOverdue: 0,
-    totalRecurring: 0,
-    upcomingPayments: 0,
-    monthlyRecurringAmount: 0
-  });
+  const [statusFilter, setStatusFilter] = useState("all");
   const { user } = useAuth();
-  
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [dateRange, setDateRange] = useState<{
-    from: Date;
-    to: Date;
-  }>({
-    from: startOfMonth(new Date()),
-    to: endOfMonth(new Date())
-  });
-  const [dateFilterMode, setDateFilterMode] = useState<"current" | "prev" | "next" | "custom">("current");
-  
-  const [newPayment, setNewPayment] = useState({
-    description: "",
-    recipient: "",
-    client_id: "",
-    category_id: "",
-    value: "",
-    due_date: format(new Date(), "yyyy-MM-dd"),
-    payment_method: "Transferência",
-    recurrence: "Mensal",
-    status: "pending"
-  });
-  
-  const [formErrors, setFormErrors] = useState<{
-    description?: boolean;
-    recipient?: boolean;
-    value?: boolean;
-    due_date?: boolean;
-  }>({});
-  
   const { toast } = useToast();
 
-  // Updated state for the edit payment form
-  const [editPayment, setEditPayment] = useState({
-    id: "",
-    description: "",
-    recipient: "",
-    client_id: "",
-    category_id: "",
-    value: "",
-    due_date: format(new Date(), "yyyy-MM-dd"),
-    payment_method: "Transferência",
-    recurrence: "Mensal",
-    status: "pending"
+  const form = useForm({
+    resolver: zodResolver(FormSchema),
+    defaultValues: {
+      description: "",
+      date: new Date(),
+      dueDate: new Date(),
+      value: 0,
+      category: "",
+      status: "pending",
+      paymentMethod: "pix",
+      recipient: "",
+      recurrence: "once",
+    },
   });
 
-  useEffect(() => {
-    if (user) {
-      fetchPayments();
-      fetchCategories();
-      fetchClients();
-      calculateDashboardData();
-    }
-  }, [filterStatus, user, dateRange]);
-
-  useEffect(() => {
-    switch (dateFilterMode) {
-      case "current":
-        setCurrentDate(new Date());
-        break;
-      case "prev":
-        setCurrentDate(prevDate => subMonths(prevDate, 1));
-        break;
-      case "next":
-        setCurrentDate(prevDate => addMonths(prevDate, 1));
-        break;
-    }
-  }, [dateFilterMode]);
-
-  useEffect(() => {
-    if (dateFilterMode !== "custom") {
-      const monthStart = startOfMonth(currentDate);
-      const monthEnd = endOfMonth(currentDate);
-      
-      setDateRange({
-        from: monthStart,
-        to: monthEnd
-      });
-    }
-  }, [currentDate, dateFilterMode]);
-
   const fetchCategories = async () => {
+    if (!user) return;
+    
     try {
-      if (!user) return;
-      
-      setLoadingCategories(true);
-      
       const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('type', 'expense');
-      
+        .from("categories")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("type", "expense");
+        
       if (error) throw error;
-      
-      if (data) {
-        setCategories(data as Category[]);
-      }
-    } catch (error: any) {
-      console.error('Error fetching categories:', error);
+      setCategories(data || []);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
       toast({
         title: "Erro ao carregar categorias",
         description: error.message,
-        variant: "destructive"
+        variant: "destructive",
       });
-    } finally {
-      setLoadingCategories(false);
-    }
-  };
-
-  const fetchClients = async () => {
-    try {
-      if (!user) return;
-      
-      setLoadingClients(true);
-      
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('user_id', user.id);
-      
-      if (error) throw error;
-      
-      if (data) {
-        setClients(data as Client[]);
-      }
-    } catch (error: any) {
-      console.error('Error fetching clients:', error);
-      toast({
-        title: "Erro ao carregar clientes",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      setLoadingClients(false);
     }
   };
 
   const fetchPayments = async () => {
+    if (!user) return;
+    
+    setLoading(true);
     try {
-      if (!user) return;
-      
-      setLoading(true);
-      
       let query = supabase
-        .from('payments')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('due_date', { ascending: true });
-      
-      if (filterStatus) {
-        query = query.eq('status', filterStatus);
+        .from("transactions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("type", "expense")
+        .order("date", { ascending: false });
+
+      if (statusFilter !== "all") {
+        query = query.eq("status", statusFilter);
       }
-      
+
+      if (search) {
+        query = query.ilike("description", `%${search}%`);
+      }
+
       const { data, error } = await query;
       
       if (error) throw error;
-      
-      if (!data) {
-        setPayments([]);
-        return;
-      }
-      
-      const formattedPayments = data.map((item) => ({
-        id: item.id,
-        due_date: format(new Date(item.due_date), 'dd/MM/yyyy'),
-        description: item.description,
-        recipient: item.recipient,
-        value: Number(item.value),
-        status: item.status,
-        payment_method: item.payment_method,
-        recurrence: item.recurrence,
-        category_id: item.category_id
-      }));
-      
-      const filteredByDate = formattedPayments.filter(payment => {
-        try {
-          const paymentDate = parseISO(payment.due_date.split('/').reverse().join('-'));
-          return isWithinInterval(paymentDate, {
-            start: dateRange.from,
-            end: dateRange.to
-          });
-        } catch (error) {
-          return false;
-        }
-      });
-      
-      setPayments(filteredByDate);
-    } catch (error: any) {
-      console.error('Error fetching payments:', error);
+      setPayments(data || []);
+    } catch (error) {
+      console.error("Error fetching payments:", error);
       toast({
         title: "Erro ao carregar pagamentos",
         description: error.message,
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateDashboardData = async () => {
+  const handleAddPayment = async (values) => {
+    if (!user) return;
+    
     try {
-      if (!user) return;
-
-      const { data: allPayments, error } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      if (!allPayments) return;
-
-      const pendingPayments = allPayments.filter(payment => payment.status === 'pending');
-      const paidPayments = allPayments.filter(payment => payment.status === 'completed');
-      const overduePayments = allPayments.filter(payment => payment.status === 'overdue');
-      const recurringPayments = allPayments.filter(payment => 
-        payment.recurrence === 'Mensal' || 
-        payment.recurrence === 'Trimestral' || 
-        payment.recurrence === 'Anual'
-      );
-
-      const totalPending = pendingPayments.reduce((sum, payment) => sum + Number(payment.value), 0);
-      const totalPaid = paidPayments.reduce((sum, payment) => sum + Number(payment.value), 0);
-      const totalOverdue = overduePayments.reduce((sum, payment) => sum + Number(payment.value), 0);
+      const { description, date, dueDate, value, category, status, paymentMethod, recipient, recurrence } = values;
       
-      const monthlyRecurring = recurringPayments
-        .filter(payment => payment.recurrence === 'Mensal')
-        .reduce((sum, payment) => sum + Number(payment.value), 0);
-      
-      const today = new Date();
-      const nextWeek = new Date();
-      nextWeek.setDate(today.getDate() + 7);
-      
-      const upcomingPayments = pendingPayments.filter(payment => {
-        const paymentDate = new Date(payment.due_date);
-        return paymentDate >= today && paymentDate <= nextWeek;
-      }).length;
-
-      setDashboardData({
-        totalPending,
-        totalPaid,
-        totalOverdue,
-        totalRecurring: recurringPayments.length,
-        upcomingPayments,
-        monthlyRecurringAmount: monthlyRecurring
-      });
-    } catch (error: any) {
-      console.error('Error calculating dashboard data:', error);
-      toast({
-        title: "Erro ao calcular dados do dashboard",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleClientChange = (clientId: string) => {
-    const selectedClient = clients.find(client => client.id === clientId);
-    if (selectedClient) {
-      setNewPayment({
-        ...newPayment,
-        client_id: clientId,
-        recipient: selectedClient.name
-      });
-    } else {
-      setNewPayment({
-        ...newPayment,
-        client_id: clientId
-      });
-    }
-  };
-  
-  const handleEditClientChange = (clientId: string) => {
-    const selectedClient = clients.find(client => client.id === clientId);
-    if (selectedClient) {
-      setEditPayment({
-        ...editPayment,
-        client_id: clientId,
-        recipient: selectedClient.name
-      });
-    } else {
-      setEditPayment({
-        ...editPayment,
-        client_id: clientId
-      });
-    }
-  };
-
-  const handleAddPayment = async () => {
-    try {
-      if (!user) return;
-      
-      const errors: {
-        description?: boolean;
-        recipient?: boolean;
-        value?: boolean;
-        due_date?: boolean;
-      } = {};
-      
-      if (!newPayment.description) errors.description = true;
-      if (!newPayment.recipient) errors.recipient = true;
-      if (!newPayment.value) errors.value = true;
-      if (!newPayment.due_date) errors.due_date = true;
-      
-      if (Object.keys(errors).length > 0) {
-        setFormErrors(errors);
-        toast({
-          title: "Campos obrigatórios",
-          description: "Preencha todos os campos destacados em vermelho para continuar.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      setFormErrors({});
+      const newPayment = {
+        user_id: user.id,
+        description,
+        date: format(date, "yyyy-MM-dd"),
+        due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
+        value,
+        category,
+        type: "expense",
+        status,
+        payment_method: paymentMethod,
+        recipient,
+        recurrence,
+      };
       
       const { error } = await supabase
-        .from('payments')
-        .insert({
-          user_id: user.id,
-          description: newPayment.description,
-          recipient: newPayment.recipient,
-          client_id: newPayment.client_id || null,
-          category_id: newPayment.category_id || null,
-          value: parseFloat(newPayment.value),
-          due_date: newPayment.due_date,
-          payment_method: newPayment.payment_method,
-          recurrence: newPayment.recurrence,
-          status: newPayment.status
-        });
-      
+        .from("transactions")
+        .insert(newPayment);
+        
       if (error) throw error;
       
       toast({
         title: "Pagamento adicionado",
-        description: "O pagamento foi adicionado com sucesso.",
+        description: "O pagamento foi adicionado com sucesso",
       });
       
-      setNewPayment({
-        description: "",
-        recipient: "",
-        client_id: "",
-        category_id: "",
-        value: "",
-        due_date: format(new Date(), "yyyy-MM-dd"),
-        payment_method: "Transferência",
-        recurrence: "Mensal",
-        status: "pending"
-      });
-      
-      setIsDialogOpen(false);
+      setOpen(false);
+      form.reset();
       fetchPayments();
-      calculateDashboardData();
-    } catch (error: any) {
-      console.error('Error adding payment:', error);
+    } catch (error) {
+      console.error("Error adding payment:", error);
       toast({
         title: "Erro ao adicionar pagamento",
         description: error.message,
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   };
-  
-  const handleUpdatePayment = async () => {
+
+  const handleDeletePayment = async (id) => {
     try {
-      if (!user) return;
-      
-      const errors: {
-        description?: boolean;
-        recipient?: boolean;
-        value?: boolean;
-        due_date?: boolean;
-      } = {};
-      
-      if (!editPayment.description) errors.description = true;
-      if (!editPayment.recipient) errors.recipient = true;
-      if (!editPayment.value) errors.value = true;
-      if (!editPayment.due_date) errors.due_date = true;
-      
-      if (Object.keys(errors).length > 0) {
-        setFormErrors(errors);
-        toast({
-          title: "Campos obrigatórios",
-          description: "Preencha todos os campos destacados em vermelho para continuar.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      setFormErrors({});
-      
       const { error } = await supabase
-        .from('payments')
-        .update({
-          description: editPayment.description,
-          recipient: editPayment.recipient,
-          client_id: editPayment.client_id || null,
-          category_id: editPayment.category_id || null,
-          value: parseFloat(editPayment.value.toString()),
-          due_date: editPayment.due_date,
-          payment_method: editPayment.payment_method,
-          recurrence: editPayment.recurrence,
-          status: editPayment.status
-        })
-        .eq('id', editPayment.id);
-      
-      if (error) throw error;
-      
-      toast({
-        title: "Pagamento atualizado",
-        description: "O pagamento foi atualizado com sucesso.",
-      });
-      
-      setIsUpdateSheetOpen(false);
-      fetchPayments();
-      calculateDashboardData();
-    } catch (error: any) {
-      console.error('Error updating payment:', error);
-      toast({
-        title: "Erro ao atualizar pagamento",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
-  };
-  
-  const handleMarkAsPaid = async (paymentId: string) => {
-    try {
-      if (!user) return;
-      
-      const { data: previousData } = await supabase
-        .from('payments')
-        .select('status, description, category_id, value')
-        .eq('id', paymentId)
-        .single();
-      
-      if (!previousData) {
-        toast({
-          title: "Erro",
-          description: "Pagamento não encontrado",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      if (previousData.status === 'completed') {
-        toast({
-          title: "Informação",
-          description: "Este pagamento já está marcado como pago",
-        });
-        return;
-      }
-      
-      const { error } = await supabase
-        .from('payments')
-        .update({
-          status: 'completed'
-        })
-        .eq('id', paymentId);
-      
-      if (error) throw error;
-      
-      let categoryData = null;
-      if (previousData.category_id) {
-        const { data } = await supabase
-          .from('categories')
-          .select('name')
-          .eq('id', previousData.category_id)
-          .single();
+        .from("transactions")
+        .delete()
+        .eq("id", id);
         
-        categoryData = data;
-      }
-      
-      const { error: transactionError } = await supabase
-        .from('transactions')
-        .insert({
-          user_id: user.id,
-          description: `Pagamento: ${previousData.description}`,
-          category: categoryData ? categoryData.name : 'Pagamentos',
-          category_id: previousData.category_id,
-          value: previousData.value,
-          type: 'expense',
-          date: new Date().toISOString(),
-          status: 'completed'
-        });
-      
-      if (transactionError) throw transactionError;
+      if (error) throw error;
       
       toast({
-        title: "Pagamento atualizado",
-        description: "O pagamento foi marcado como pago com sucesso.",
+        title: "Pagamento excluído",
+        description: "O pagamento foi excluído com sucesso",
       });
       
       fetchPayments();
-      calculateDashboardData();
-    } catch (error: any) {
+    } catch (error) {
+      console.error("Error deleting payment:", error);
       toast({
-        title: "Erro ao atualizar pagamento",
+        title: "Erro ao excluir pagamento",
         description: error.message,
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   };
 
-  const formatCurrency = (value: number) => {
-    return value.toLocaleString('pt-BR', { 
-      style: 'currency', 
-      currency: 'BRL' 
-    });
-  };
-  
-  const openEditSheet = (payment: Payment) => {
-    // Convert the payment format to the edit form format
-    setEditPayment({
-      id: payment.id,
-      description: payment.description,
-      recipient: payment.recipient,
-      client_id: "", // We'll need to find the client ID if available
-      category_id: payment.category_id || "",
-      value: payment.value.toString(),
-      due_date: format(parse(payment.due_date, 'dd/MM/yyyy', new Date()), 'yyyy-MM-dd'),
-      payment_method: payment.payment_method,
-      recurrence: payment.recurrence,
-      status: payment.status
-    });
-    
-    setIsUpdateSheetOpen(true);
-  };
+  useEffect(() => {
+    if (user) {
+      fetchCategories();
+      fetchPayments();
+    }
+  }, [user, statusFilter, search]);
 
-  // New handler for date range changes
-  const handleDateRangeChange = (range: { from: Date; to: Date }) => {
-    setDateRange(range);
-    setDateFilterMode("custom");
-  };
-
-  // Handler for going to previous month
-  const handlePrevMonth = () => {
-    setDateFilterMode("prev");
-  };
-
-  // Handler for going to next month
-  const handleNextMonth = () => {
-    setDateFilterMode("next");
-  };
-
-  // Handler for returning to current month
-  const handleCurrentMonth = () => {
-    setDateFilterMode("current");
+  const onStatusChange = () => {
+    fetchPayments();
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Pagamentos</h1>
-          <p className="text-muted-foreground">
-            Gerencie seus pagamentos e contas a pagar.
-          </p>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto bg-fin-green text-black hover:bg-fin-green/90">
-                <Plus className="mr-2 h-4 w-4" /> Novo Pagamento
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px] bg-[#1A1A1E] border-[#2A2A2E] text-white">
-              <DialogHeader>
-                <DialogTitle>Novo Pagamento</DialogTitle>
-                <DialogDescription>
-                  Adicione um novo pagamento para controlar suas finanças.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-6 py-4">
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="description" className={formErrors.description ? "text-fin-red" : ""}>Descrição *</Label>
-                    <Input
-                      id="description"
-                      placeholder="Ex: Aluguel, Conta de luz, etc."
-                      className={cn(
-                        "bg-[#1F1F23] border-[#2A2A2E]",
-                        formErrors.description ? "border-fin-red focus-visible:ring-fin-red" : ""
-                      )}
-                      value={newPayment.description}
-                      onChange={(e) => {
-                        setNewPayment({...newPayment, description: e.target.value});
-                        if (e.target.value) {
-                          setFormErrors({...formErrors, description: false});
-                        }
-                      }}
-                    />
-                    {formErrors.description && (
-                      <p className="text-fin-red text-xs">Este campo é obrigatório</p>
+    <div className="container mx-auto p-4 space-y-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Pagamentos</h1>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2">
+              <PlusCircle className="h-4 w-4" />
+              Novo Pagamento
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Adicionar Novo Pagamento</DialogTitle>
+              <DialogDescription>
+                Preencha os detalhes do pagamento abaixo.
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleAddPayment)} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Descrição</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Descrição do pagamento" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className={cn(
-                      "flex items-center gap-1",
-                      formErrors.recipient ? "text-fin-red" : ""
-                    )}>
-                      <Users className="h-4 w-4" /> Destinatário *
-                    </Label>
-                    <Select
-                      value={newPayment.client_id}
-                      onValueChange={handleClientChange}
-                    >
-                      <SelectTrigger className={cn(
-                        "bg-[#1F1F23] border-[#2A2A2E]",
-                        formErrors.recipient ? "border-fin-red focus-visible:ring-fin-red" : ""
-                      )}>
-                        <SelectValue placeholder="Selecione um cliente ou digite manualmente" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {loadingClients ? (
-                          <div className="flex items-center justify-center p-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span className="ml-2">Carregando...</span>
-                          </div>
-                        ) : clients.length === 0 ? (
-                          <div className="p-2 text-center">
-                            <p className="text-sm text-muted-foreground">Nenhum cliente encontrado</p>
-                          </div>
-                        ) : (
-                          clients.map(client => (
-                            <SelectItem key={client.id} value={client.id}>
-                              {client.name}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {!newPayment.client_id && (
-                      <Input
-                        className={cn(
-                          "mt-2 bg-[#1F1F23] border-[#2A2A2E]",
-                          formErrors.recipient ? "border-fin-red focus-visible:ring-fin-red" : ""
-                        )}
-                        placeholder="Ou digite o nome do destinatário"
-                        value={newPayment.recipient}
-                        onChange={(e) => {
-                          setNewPayment({...newPayment, recipient: e.target.value});
-                          if (e.target.value) {
-                            setFormErrors({...formErrors, recipient: false});
-                          }
-                        }}
-                      />
-                    )}
-                    {formErrors.recipient && (
-                      <p className="text-fin-red text-xs">Este campo é obrigatório</p>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-1">
-                      <Tag className="h-4 w-4" /> Categoria
-                    </Label>
-                    <Select
-                      value={newPayment.category_id}
-                      onValueChange={(value) => setNewPayment({...newPayment, category_id: value})}
-                    >
-                      <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
-                        <SelectValue placeholder="Selecione uma categoria" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {loadingCategories ? (
-                          <div className="flex items-center justify-center p-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span className="ml-2">Carregando...</span>
-                          </div>
-                        ) : categories.length === 0 ? (
-                          <div className="p-2 text-center">
-                            <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada</p>
-                          </div>
-                        ) : (
-                          categories.map(category => (
-                            <SelectItem key={category.id} value={category.id}>
-                              <div className="flex items-center">
-                                <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: category.color }} />
-                                {category.name}
-                              </div>
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="value" className={formErrors.value ? "text-fin-red" : ""}>Valor *</Label>
-                      <Input
-                        id="value"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0,00"
-                        className={cn(
-                          "bg-[#1F1F23] border-[#2A2A2E]",
-                          formErrors.value ? "border-fin-red focus-visible:ring-fin-red" : ""
-                        )}
-                        value={newPayment.value}
-                        onChange={(e) => {
-                          setNewPayment({...newPayment, value: e.target.value});
-                          if (e.target.value) {
-                            setFormErrors({...formErrors, value: false});
-                          }
-                        }}
-                      />
-                      {formErrors.value && (
-                        <p className="text-fin-red text-xs">Este campo é obrigatório</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="due_date" className={formErrors.due_date ? "text-fin-red" : ""}>Data de Vencimento *</Label>
-                      <div className="relative">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "w-full justify-start text-left font-normal bg-[#1F1F23] border-[#2A2A2E]",
-                                !newPayment.due_date && "text-muted-foreground",
-                                formErrors.due_date ? "border-fin-red focus-visible:ring-fin-red" : ""
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {newPayment.due_date ? format(new Date(newPayment.due_date), "dd/MM/yyyy") : <span>Selecione uma data</span>}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <CalendarComponent
-                              mode="single"
-                              selected={newPayment.due_date ? new Date(newPayment.due_date) : undefined}
-                              onSelect={(date) => {
-                                if (date) {
-                                  setNewPayment({
-                                    ...newPayment, 
-                                    due_date: format(date, "yyyy-MM-dd")
-                                  });
-                                  setFormErrors({...formErrors, due_date: false});
-                                }
-                              }}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                      {formErrors.due_date && (
-                        <p className="text-fin-red text-xs">Este campo é obrigatório</p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="payment_method">Método de Pagamento</Label>
-                      <Select
-                        value={newPayment.payment_method}
-                        onValueChange={(value) => setNewPayment({...newPayment, payment_method: value})}
-                      >
-                        <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
-                          <SelectValue placeholder="Escolha o método de pagamento" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Transferência">Transferência</SelectItem>
-                          <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
-                          <SelectItem value="Boleto">Boleto</SelectItem>
-                          <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                          <SelectItem value="PIX">PIX</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="recurrence">Recorrência</Label>
-                      <Select
-                        value={newPayment.recurrence}
-                        onValueChange={(value) => setNewPayment({...newPayment, recurrence: value})}
-                      >
-                        <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
-                          <SelectValue placeholder="Escolha a recorrência" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Único">Único</SelectItem>
-                          <SelectItem value="Mensal">Mensal</SelectItem>
-                          <SelectItem value="Trimestral">Trimestral</SelectItem>
-                          <SelectItem value="Anual">Anual</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select
-                      value={newPayment.status}
-                      onValueChange={(value) => setNewPayment({...newPayment, status: value})}
-                    >
-                      <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
-                        <SelectValue placeholder="Escolha o status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pending">Pendente</SelectItem>
-                        <SelectItem value="completed">Pago</SelectItem>
-                        <SelectItem value="overdue">Atrasado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                <Button onClick={handleAddPayment} className="bg-fin-green text-black hover:bg-fin-green/90">
-                  Adicionar
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-      
-      {/* Dashboard Cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        <Card className="bg-[#1F1F23] border-[#2A2A2E]">
-          <CardHeader className="flex flex-row items-center justify-between py-4">
-            <CardTitle className="text-md font-medium">Total Pendente</CardTitle>
-            <Clock className="h-5 w-5 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalPending)}</div>
-            <p className="text-xs text-muted-foreground">
-              {payments.filter(p => p.status === 'pending').length} pagamentos pendentes
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-[#1F1F23] border-[#2A2A2E]">
-          <CardHeader className="flex flex-row items-center justify-between py-4">
-            <CardTitle className="text-md font-medium">Total Pago</CardTitle>
-            <CheckCircle className="h-5 w-5 text-fin-green" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalPaid)}</div>
-            <p className="text-xs text-muted-foreground">
-              {payments.filter(p => p.status === 'completed').length} pagamentos concluídos
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-[#1F1F23] border-[#2A2A2E]">
-          <CardHeader className="flex flex-row items-center justify-between py-4">
-            <CardTitle className="text-md font-medium">Total Atrasado</CardTitle>
-            <AlertCircle className="h-5 w-5 text-fin-red" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalOverdue)}</div>
-            <p className="text-xs text-muted-foreground">
-              {payments.filter(p => p.status === 'overdue').length} pagamentos atrasados
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-      
-      {/* Filter & Search */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex-1 w-full sm:w-auto">
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar pagamentos..."
-              className="pl-8 bg-[#1F1F23] border-[#2A2A2E]"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-        </div>
-        
-        <div className="flex gap-2 w-full sm:w-auto">
-          <DateFilter 
-            dateRange={dateRange}
-            onDateRangeChange={handleDateRangeChange}
-            onPrevMonth={handlePrevMonth}
-            onNextMonth={handleNextMonth}
-            onCurrentMonth={handleCurrentMonth}
-            dateFilterMode={dateFilterMode}
-            currentDate={currentDate}
-          />
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full sm:w-auto bg-[#1F1F23] border-[#2A2A2E]">
-                <Filter className="mr-2 h-4 w-4" /> Filtros
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setFilterStatus(null)}>
-                Todos
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterStatus("pending")}>
-                Pendentes
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterStatus("completed")}>
-                Pagos
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterStatus("overdue")}>
-                Atrasados
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
-          <Button variant="outline" className="w-10 h-10 p-0 sm:w-auto bg-[#1F1F23] border-[#2A2A2E]" onClick={() => setViewMode(viewMode === "list" ? "calendar" : "list")}>
-            {viewMode === "list" ? (
-              <Calendar className="h-4 w-4" />
-            ) : (
-              <LayoutGrid className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-      </div>
-      
-      {/* Tabs & Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="bg-[#1F1F23] border-[#2A2A2E]">
-          <TabsTrigger value="all">Todos</TabsTrigger>
-          <TabsTrigger value="pending">Pendentes</TabsTrigger>
-          <TabsTrigger value="completed">Pagos</TabsTrigger>
-          <TabsTrigger value="overdue">Atrasados</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="all" className="space-y-4">
-          {viewMode === "list" ? (
-            <div className="rounded-md border border-[#2A2A2E]">
-              {loading ? (
-                <div className="flex items-center justify-center py-20">
-                  <div className="flex flex-col items-center gap-2">
-                    <Loader2 className="h-8 w-8 animate-spin text-fin-green" />
-                    <p className="text-sm text-muted-foreground">Carregando pagamentos...</p>
-                  </div>
-                </div>
-              ) : payments.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-                  <CreditCard className="h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium">Nenhum pagamento encontrado</h3>
-                  <p className="text-sm text-muted-foreground max-w-sm mt-1">
-                    Você ainda não possui pagamentos registrados para o período selecionado.
-                  </p>
-                  <Button onClick={() => setIsDialogOpen(true)} className="mt-4 bg-fin-green text-black hover:bg-fin-green/90">
-                    <Plus className="mr-2 h-4 w-4" /> Adicionar Pagamento
-                  </Button>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader className="bg-[#1A1A1E]">
-                    <TableRow>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Destinatário</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Recorrência</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payments
-                      .filter(payment => 
-                        payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        payment.recipient.toLowerCase().includes(searchTerm.toLowerCase())
-                      )
-                      .map((payment) => (
-                        <TableRow key={payment.id}>
-                          <TableCell className="font-medium">{payment.description}</TableCell>
-                          <TableCell>{payment.recipient}</TableCell>
-                          <TableCell>{payment.due_date}</TableCell>
-                          <TableCell>{formatCurrency(payment.value)}</TableCell>
-                          <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                          <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              {payment.status !== 'completed' && (
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => handleMarkAsPaid(payment.id)}
-                                  className="h-8 w-8 text-fin-green hover:text-fin-green/80 hover:bg-fin-green/10"
-                                >
-                                  <Check className="h-4 w-4" />
-                                </Button>
-                              )}
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => openEditSheet(payment)}
-                                className="h-8 w-8 text-amber-500 hover:text-amber-500/80 hover:bg-amber-500/10"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-          ) : (
-            <PaymentCalendarView 
-              payments={payments} 
-              onSelectDate={(date) => console.log("Selected date:", date)}
-            />
-          )}
-        </TabsContent>
-        
-        <TabsContent value="pending" className="space-y-4">
-          {/* Display only pending payments */}
-          {/* Similar structure as 'all' tab but filtered */}
-          {viewMode === "list" ? (
-            <div className="rounded-md border border-[#2A2A2E]">
-              {loading ? (
-                <div className="flex items-center justify-center py-20">
-                  <div className="flex flex-col items-center gap-2">
-                    <Loader2 className="h-8 w-8 animate-spin text-fin-green" />
-                    <p className="text-sm text-muted-foreground">Carregando pagamentos...</p>
-                  </div>
-                </div>
-              ) : payments.filter(p => p.status === 'pending').length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-                  <Clock className="h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium">Nenhum pagamento pendente</h3>
-                  <p className="text-sm text-muted-foreground max-w-sm mt-1">
-                    Você não possui pagamentos pendentes para o período selecionado.
-                  </p>
-                  <Button onClick={() => setIsDialogOpen(true)} className="mt-4 bg-fin-green text-black hover:bg-fin-green/90">
-                    <Plus className="mr-2 h-4 w-4" /> Adicionar Pagamento
-                  </Button>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader className="bg-[#1A1A1E]">
-                    <TableRow>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Destinatário</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Recorrência</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payments
-                      .filter(payment => 
-                        payment.status === 'pending' &&
-                        (payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        payment.recipient.toLowerCase().includes(searchTerm.toLowerCase()))
-                      )
-                      .map((payment) => (
-                        <TableRow key={payment.id}>
-                          <TableCell className="font-medium">{payment.description}</TableCell>
-                          <TableCell>{payment.recipient}</TableCell>
-                          <TableCell>{payment.due_date}</TableCell>
-                          <TableCell>{formatCurrency(payment.value)}</TableCell>
-                          <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                          <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => handleMarkAsPaid(payment.id)}
-                                className="h-8 w-8 text-fin-green hover:text-fin-green/80 hover:bg-fin-green/10"
-                              >
-                                <Check className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => openEditSheet(payment)}
-                                className="h-8 w-8 text-amber-500 hover:text-amber-500/80 hover:bg-amber-500/10"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-          ) : (
-            <PaymentCalendarView 
-              payments={payments.filter(p => p.status === 'pending')} 
-              onSelectDate={(date) => console.log("Selected date:", date)}
-            />
-          )}
-        </TabsContent>
-        
-        <TabsContent value="completed" className="space-y-4">
-          {/* Display only completed payments */}
-          {/* Similar structure as 'all' tab but filtered */}
-          {viewMode === "list" ? (
-            <div className="rounded-md border border-[#2A2A2E]">
-              {loading ? (
-                <div className="flex items-center justify-center py-20">
-                  <div className="flex flex-col items-center gap-2">
-                    <Loader2 className="h-8 w-8 animate-spin text-fin-green" />
-                    <p className="text-sm text-muted-foreground">Carregando pagamentos...</p>
-                  </div>
-                </div>
-              ) : payments.filter(p => p.status === 'completed').length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-                  <CheckCircle className="h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium">Nenhum pagamento concluído</h3>
-                  <p className="text-sm text-muted-foreground max-w-sm mt-1">
-                    Você não possui pagamentos concluídos para o período selecionado.
-                  </p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader className="bg-[#1A1A1E]">
-                    <TableRow>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Destinatário</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Recorrência</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payments
-                      .filter(payment => 
-                        payment.status === 'completed' &&
-                        (payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        payment.recipient.toLowerCase().includes(searchTerm.toLowerCase()))
-                      )
-                      .map((payment) => (
-                        <TableRow key={payment.id}>
-                          <TableCell className="font-medium">{payment.description}</TableCell>
-                          <TableCell>{payment.recipient}</TableCell>
-                          <TableCell>{payment.due_date}</TableCell>
-                          <TableCell>{formatCurrency(payment.value)}</TableCell>
-                          <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                          <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => openEditSheet(payment)}
-                                className="h-8 w-8 text-amber-500 hover:text-amber-500/80 hover:bg-amber-500/10"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-          ) : (
-            <PaymentCalendarView 
-              payments={payments.filter(p => p.status === 'completed')} 
-              onSelectDate={(date) => console.log("Selected date:", date)}
-            />
-          )}
-        </TabsContent>
-        
-        <TabsContent value="overdue" className="space-y-4">
-          {/* Display only overdue payments */}
-          {/* Similar structure as 'all' tab but filtered */}
-          {viewMode === "list" ? (
-            <div className="rounded-md border border-[#2A2A2E]">
-              {loading ? (
-                <div className="flex items-center justify-center py-20">
-                  <div className="flex flex-col items-center gap-2">
-                    <Loader2 className="h-8 w-8 animate-spin text-fin-green" />
-                    <p className="text-sm text-muted-foreground">Carregando pagamentos...</p>
-                  </div>
-                </div>
-              ) : payments.filter(p => p.status === 'overdue').length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-                  <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium">Nenhum pagamento atrasado</h3>
-                  <p className="text-sm text-muted-foreground max-w-sm mt-1">
-                    Você não possui pagamentos atrasados para o período selecionado.
-                  </p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader className="bg-[#1A1A1E]">
-                    <TableRow>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Destinatário</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Recorrência</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payments
-                      .filter(payment => 
-                        payment.status === 'overdue' &&
-                        (payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        payment.recipient.toLowerCase().includes(searchTerm.toLowerCase()))
-                      )
-                      .map((payment) => (
-                        <TableRow key={payment.id}>
-                          <TableCell className="font-medium">{payment.description}</TableCell>
-                          <TableCell>{payment.recipient}</TableCell>
-                          <TableCell>{payment.due_date}</TableCell>
-                          <TableCell>{formatCurrency(payment.value)}</TableCell>
-                          <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                          <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => handleMarkAsPaid(payment.id)}
-                                className="h-8 w-8 text-fin-green hover:text-fin-green/80 hover:bg-fin-green/10"
-                              >
-                                <Check className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => openEditSheet(payment)}
-                                className="h-8 w-8 text-amber-500 hover:text-amber-500/80 hover:bg-amber-500/10"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-          ) : (
-            <PaymentCalendarView 
-              payments={payments.filter(p => p.status === 'overdue')} 
-              onSelectDate={(date) => console.log("Selected date:", date)}
-            />
-          )}
-        </TabsContent>
-      </Tabs>
-      
-      {/* Edit Payment Sheet */}
-      <Sheet open={isUpdateSheetOpen} onOpenChange={setIsUpdateSheetOpen}>
-        <SheetContent className="sm:max-w-[500px] bg-[#1A1A1E] border-[#2A2A2E] text-white overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Editar Pagamento</SheetTitle>
-            <SheetDescription>
-              Atualize as informações do pagamento selecionado.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="grid gap-6 py-6">
-            <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-description" className={formErrors.description ? "text-fin-red" : ""}>Descrição *</Label>
-                <Input
-                  id="edit-description"
-                  placeholder="Ex: Aluguel, Conta de luz, etc."
-                  className={cn(
-                    "bg-[#1F1F23] border-[#2A2A2E]",
-                    formErrors.description ? "border-fin-red focus-visible:ring-fin-red" : ""
-                  )}
-                  value={editPayment.description}
-                  onChange={(e) => {
-                    setEditPayment({...editPayment, description: e.target.value});
-                    if (e.target.value) {
-                      setFormErrors({...formErrors, description: false});
-                    }
-                  }}
-                />
-                {formErrors.description && (
-                  <p className="text-fin-red text-xs">Este campo é obrigatório</p>
-                )}
-              </div>
-              
-              <div className="space-y-2">
-                <Label className={cn(
-                  "flex items-center gap-1",
-                  formErrors.recipient ? "text-fin-red" : ""
-                )}>
-                  <Users className="h-4 w-4" /> Destinatário *
-                </Label>
-                <Select
-                  value={editPayment.client_id}
-                  onValueChange={handleEditClientChange}
-                >
-                  <SelectTrigger className={cn(
-                    "bg-[#1F1F23] border-[#2A2A2E]",
-                    formErrors.recipient ? "border-fin-red focus-visible:ring-fin-red" : ""
-                  )}>
-                    <SelectValue placeholder="Selecione um cliente ou digite manualmente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {loadingClients ? (
-                      <div className="flex items-center justify-center p-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="ml-2">Carregando...</span>
-                      </div>
-                    ) : clients.length === 0 ? (
-                      <div className="p-2 text-center">
-                        <p className="text-sm text-muted-foreground">Nenhum cliente encontrado</p>
-                      </div>
-                    ) : (
-                      clients.map(client => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {!editPayment.client_id && (
-                  <Input
-                    className={cn(
-                      "mt-2 bg-[#1F1F23] border-[#2A2A2E]",
-                      formErrors.recipient ? "border-fin-red focus-visible:ring-fin-red" : ""
-                    )}
-                    placeholder="Ou digite o nome do destinatário"
-                    value={editPayment.recipient}
-                    onChange={(e) => {
-                      setEditPayment({...editPayment, recipient: e.target.value});
-                      if (e.target.value) {
-                        setFormErrors({...formErrors, recipient: false});
-                      }
-                    }}
                   />
-                )}
-                {formErrors.recipient && (
-                  <p className="text-fin-red text-xs">Este campo é obrigatório</p>
-                )}
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1">
-                  <Tag className="h-4 w-4" /> Categoria
-                </Label>
-                <Select
-                  value={editPayment.category_id}
-                  onValueChange={(value) => setEditPayment({...editPayment, category_id: value})}
-                >
-                  <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
-                    <SelectValue placeholder="Selecione uma categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {loadingCategories ? (
-                      <div className="flex items-center justify-center p-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="ml-2">Carregando...</span>
-                      </div>
-                    ) : categories.length === 0 ? (
-                      <div className="p-2 text-center">
-                        <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada</p>
-                      </div>
-                    ) : (
-                      categories.map(category => (
-                        <SelectItem key={category.id} value={category.id}>
-                          <div className="flex items-center">
-                            <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: category.color }} />
-                            {category.name}
-                          </div>
-                        </SelectItem>
-                      ))
+                  <FormField
+                    control={form.control}
+                    name="recipient"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Destinatário</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Nome do destinatário" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-value" className={formErrors.value ? "text-fin-red" : ""}>Valor *</Label>
-                  <Input
-                    id="edit-value"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0,00"
-                    className={cn(
-                      "bg-[#1F1F23] border-[#2A2A2E]",
-                      formErrors.value ? "border-fin-red focus-visible:ring-fin-red" : ""
-                    )}
-                    value={editPayment.value}
-                    onChange={(e) => {
-                      setEditPayment({...editPayment, value: e.target.value});
-                      if (e.target.value) {
-                        setFormErrors({...formErrors, value: false});
-                      }
-                    }}
                   />
-                  {formErrors.value && (
-                    <p className="text-fin-red text-xs">Este campo é obrigatório</p>
-                  )}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-due_date" className={formErrors.due_date ? "text-fin-red" : ""}>Data de Vencimento *</Label>
-                  <div className="relative">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal bg-[#1F1F23] border-[#2A2A2E]",
-                            !editPayment.due_date && "text-muted-foreground",
-                            formErrors.due_date ? "border-fin-red focus-visible:ring-fin-red" : ""
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {editPayment.due_date ? format(new Date(editPayment.due_date), "dd/MM/yyyy") : <span>Selecione uma data</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <CalendarComponent
-                          mode="single"
-                          selected={editPayment.due_date ? new Date(editPayment.due_date) : undefined}
-                          onSelect={(date) => {
-                            if (date) {
-                              setEditPayment({
-                                ...editPayment, 
-                                due_date: format(date, "yyyy-MM-dd")
-                              });
-                              setFormErrors({...formErrors, due_date: false});
-                            }
-                          }}
-                          initialFocus
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="date"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Data do Pagamento</FormLabel>
+                        <DatePicker
+                          date={field.value}
+                          setDate={field.onChange}
                         />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  {formErrors.due_date && (
-                    <p className="text-fin-red text-xs">Este campo é obrigatório</p>
-                  )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="dueDate"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Data de Vencimento</FormLabel>
+                        <DatePicker
+                          date={field.value}
+                          setDate={field.onChange}
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-payment_method">Método de Pagamento</Label>
-                  <Select
-                    value={editPayment.payment_method}
-                    onValueChange={(value) => setEditPayment({...editPayment, payment_method: value})}
-                  >
-                    <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
-                      <SelectValue placeholder="Escolha o método de pagamento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Transferência">Transferência</SelectItem>
-                      <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
-                      <SelectItem value="Boleto">Boleto</SelectItem>
-                      <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                      <SelectItem value="PIX">PIX</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="value"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Valor</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="0.01" min="0" placeholder="0,00" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="category"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Categoria</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione uma categoria" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {categories.map((category) => (
+                              <SelectItem key={category.id} value={category.name}>
+                                {category.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-recurrence">Recorrência</Label>
-                  <Select
-                    value={editPayment.recurrence}
-                    onValueChange={(value) => setEditPayment({...editPayment, recurrence: value})}
-                  >
-                    <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
-                      <SelectValue placeholder="Escolha a recorrência" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Único">Único</SelectItem>
-                      <SelectItem value="Mensal">Mensal</SelectItem>
-                      <SelectItem value="Trimestral">Trimestral</SelectItem>
-                      <SelectItem value="Anual">Anual</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="status"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Status</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione um status" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="completed">Pago</SelectItem>
+                            <SelectItem value="pending">Pendente</SelectItem>
+                            <SelectItem value="overdue">Atrasado</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="paymentMethod"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Método de Pagamento</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione um método" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="pix">PIX</SelectItem>
+                            <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
+                            <SelectItem value="debit_card">Cartão de Débito</SelectItem>
+                            <SelectItem value="bank_transfer">Transferência Bancária</SelectItem>
+                            <SelectItem value="cash">Dinheiro</SelectItem>
+                            <SelectItem value="other">Outro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="recurrence"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Recorrência</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="once">Única</SelectItem>
+                            <SelectItem value="monthly">Mensal</SelectItem>
+                            <SelectItem value="weekly">Semanal</SelectItem>
+                            <SelectItem value="yearly">Anual</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="edit-status">Status</Label>
-                <Select
-                  value={editPayment.status}
-                  onValueChange={(value) => setEditPayment({...editPayment, status: value})}
-                >
-                  <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
-                    <SelectValue placeholder="Escolha o status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pending">Pendente</SelectItem>
-                    <SelectItem value="completed">Pago</SelectItem>
-                    <SelectItem value="overdue">Atrasado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 pt-4">
-                <Button variant="outline" onClick={() => setIsUpdateSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={handleUpdatePayment} className="bg-fin-green text-black hover:bg-fin-green/90 mb-2 sm:mb-0">
-                  Atualizar
-                </Button>
-              </div>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit">Adicionar Pagamento</Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="flex space-x-4 items-center mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Buscar pagamentos..."
+            className="pl-8"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filtrar por status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="completed">Pagos</SelectItem>
+            <SelectItem value="pending">Pendentes</SelectItem>
+            <SelectItem value="overdue">Atrasados</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle>Pagamentos</CardTitle>
+          <CardDescription>
+            Gerencie todos os seus pagamentos em um só lugar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TransactionList 
+            transactions={payments} 
+            loading={loading} 
+            onDeleteTransaction={handleDeletePayment} 
+            onStatusChange={onStatusChange}
+            showStatusActions={true}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 };
