@@ -7,7 +7,9 @@ import {
   Filter, 
   Plus, 
   Search,
-  Loader2 
+  Loader2,
+  Calendar,
+  CalendarIcon
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { TransactionList } from "@/components/transactions/TransactionList";
 import { DateFilter } from "@/components/payments/DateFilter";
 import { startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 
 // Define the Transaction type based on the database schema
 interface Transaction {
@@ -39,10 +45,19 @@ interface Transaction {
   status: string;
 }
 
+interface Category {
+  id: string;
+  name: string;
+  type: "income" | "expense" | "investment";
+  color: string;
+}
+
 const Movimentacoes = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [filterType, setFilterType] = useState<string | null>(null);
   const { user } = useAuth();
@@ -61,9 +76,10 @@ const Movimentacoes = () => {
   // New transaction form state
   const [newTransaction, setNewTransaction] = useState({
     description: "",
-    category: "",
+    category_id: "",
     type: "income",
-    value: ""
+    value: "",
+    date: format(new Date(), "yyyy-MM-dd")
   });
   
   const { toast } = useToast();
@@ -71,6 +87,7 @@ const Movimentacoes = () => {
   useEffect(() => {
     if (user) {
       fetchTransactions();
+      fetchCategories();
     }
   }, [filterType, user, dateRange]);
 
@@ -98,6 +115,34 @@ const Movimentacoes = () => {
       // Custom range is handled directly by the date picker
     }
   }, [dateFilterMode, currentDate]);
+
+  const fetchCategories = async () => {
+    try {
+      if (!user) return;
+      
+      setLoadingCategories(true);
+      
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      
+      if (data) {
+        setCategories(data as Category[]);
+      }
+    } catch (error: any) {
+      console.error('Error fetching categories:', error);
+      toast({
+        title: "Erro ao carregar categorias",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
 
   const fetchTransactions = async () => {
     try {
@@ -158,10 +203,21 @@ const Movimentacoes = () => {
     try {
       if (!user) return;
       
-      if (!newTransaction.description || !newTransaction.category || !newTransaction.value) {
+      if (!newTransaction.description || !newTransaction.category_id || !newTransaction.value || !newTransaction.date) {
         toast({
           title: "Dados incompletos",
           description: "Preencha todos os campos obrigatórios",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Get the category name from the selected category_id
+      const selectedCategory = categories.find(cat => cat.id === newTransaction.category_id);
+      if (!selectedCategory) {
+        toast({
+          title: "Categoria inválida",
+          description: "Selecione uma categoria válida",
           variant: "destructive"
         });
         return;
@@ -172,10 +228,11 @@ const Movimentacoes = () => {
         .from('transactions')
         .insert({
           description: newTransaction.description,
-          category: newTransaction.category,
+          category: selectedCategory.name,
+          category_id: newTransaction.category_id,
           type: newTransaction.type,
           value: Number(newTransaction.value),
-          date: new Date().toISOString(),
+          date: new Date(newTransaction.date).toISOString(),
           status: 'completed',
           user_id: user.id
         });
@@ -185,9 +242,10 @@ const Movimentacoes = () => {
       // Reset form and close dialog
       setNewTransaction({
         description: "",
-        category: "",
+        category_id: "",
         type: "income",
-        value: ""
+        value: "",
+        date: format(new Date(), "yyyy-MM-dd")
       });
       setIsDialogOpen(false);
       
@@ -260,6 +318,11 @@ const Movimentacoes = () => {
     transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
     transaction.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Filter categories based on transaction type
+  const filteredCategories = categories.filter(category => 
+    category.type === newTransaction.type || category.type === "investment"
+  );
   
   return (
     <div className="space-y-6">
@@ -276,65 +339,142 @@ const Movimentacoes = () => {
               <Plus className="mr-2 h-4 w-4" /> Nova Movimentação
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px] bg-[#1A1A1E] border-[#2A2A2E] text-white">
+          <DialogContent className="sm:max-w-[500px] bg-[#1A1A1E] border-[#2A2A2E] text-white">
             <DialogHeader>
               <DialogTitle>Nova Movimentação</DialogTitle>
               <DialogDescription>
                 Adicione uma nova transação financeira ao sistema.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="description" className="text-right">
-                  Descrição
-                </Label>
-                <Input
-                  id="description"
-                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
-                  value={newTransaction.description}
-                  onChange={(e) => setNewTransaction({...newTransaction, description: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="category" className="text-right">
-                  Categoria
-                </Label>
-                <Input
-                  id="category"
-                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
-                  value={newTransaction.category}
-                  onChange={(e) => setNewTransaction({...newTransaction, category: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="type" className="text-right">
-                  Tipo
-                </Label>
-                <select
-                  id="type"
-                  className="col-span-3 bg-[#1F1F23] border border-[#2A2A2E] rounded-md h-10 px-3 text-base focus:outline-none"
-                  value={newTransaction.type}
-                  onChange={(e) => setNewTransaction({...newTransaction, type: e.target.value})}
-                >
-                  <option value="income">Receita</option>
-                  <option value="expense">Despesa</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="value" className="text-right">
-                  Valor
-                </Label>
-                <Input
-                  id="value"
-                  type="number"
-                  step="0.01"
-                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
-                  value={newTransaction.value}
-                  onChange={(e) => setNewTransaction({...newTransaction, value: e.target.value})}
-                />
+            <div className="grid gap-6 py-4">
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="type">Tipo de Movimentação</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      className={`flex-1 ${newTransaction.type === 'income' ? 'bg-green-600 hover:bg-green-700' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                      onClick={() => setNewTransaction({...newTransaction, type: 'income'})}
+                    >
+                      Receita
+                    </Button>
+                    <Button
+                      type="button"
+                      className={`flex-1 ${newTransaction.type === 'expense' ? 'bg-red-600 hover:bg-red-700' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                      onClick={() => setNewTransaction({...newTransaction, type: 'expense'})}
+                    >
+                      Despesa
+                    </Button>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="description">Descrição</Label>
+                  <Input
+                    id="description"
+                    placeholder="Ex: Salário, Aluguel, etc."
+                    className="bg-[#1F1F23] border-[#2A2A2E]"
+                    value={newTransaction.description}
+                    onChange={(e) => setNewTransaction({...newTransaction, description: e.target.value})}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="category">Categoria</Label>
+                  <Select
+                    value={newTransaction.category_id}
+                    onValueChange={(value) => setNewTransaction({...newTransaction, category_id: value})}
+                  >
+                    <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
+                      <SelectValue placeholder="Selecione uma categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loadingCategories ? (
+                        <div className="flex items-center justify-center p-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span className="ml-2">Carregando...</span>
+                        </div>
+                      ) : filteredCategories.length === 0 ? (
+                        <div className="p-2 text-center">
+                          <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada</p>
+                          <Button 
+                            variant="link" 
+                            className="p-0 h-auto mt-1 text-fin-green" 
+                            onClick={() => {
+                              setIsDialogOpen(false);
+                              // Add logic to navigate to categories page or open categories dialog
+                            }}
+                          >
+                            Criar categoria
+                          </Button>
+                        </div>
+                      ) : (
+                        filteredCategories.map(category => (
+                          <SelectItem key={category.id} value={category.id}>
+                            <div className="flex items-center">
+                              <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: category.color }} />
+                              {category.name}
+                            </div>
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="value">Valor</Label>
+                    <Input
+                      id="value"
+                      type="number"
+                      step="0.01"
+                      placeholder="0,00"
+                      className="bg-[#1F1F23] border-[#2A2A2E]"
+                      value={newTransaction.value}
+                      onChange={(e) => setNewTransaction({...newTransaction, value: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="date">Data</Label>
+                    <div className="relative">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal bg-[#1F1F23] border-[#2A2A2E]",
+                              !newTransaction.date && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {newTransaction.date ? format(new Date(newTransaction.date), "dd/MM/yyyy") : <span>Selecione uma data</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={newTransaction.date ? new Date(newTransaction.date) : undefined}
+                            onSelect={(date) => date && setNewTransaction({
+                              ...newTransaction, 
+                              date: format(date, "yyyy-MM-dd")
+                            })}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => setIsDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
               <Button 
                 className="bg-fin-green text-black hover:bg-fin-green/90" 
                 onClick={handleCreateTransaction}

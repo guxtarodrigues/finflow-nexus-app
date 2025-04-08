@@ -1,4 +1,3 @@
-
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
@@ -25,7 +24,7 @@ export const Sidebar = () => {
   const menuItems = [
     {
       name: "Dashboard",
-      path: "/",
+      path: "/dashboard",
       icon: <Home size={20} />,
       expanded: false,
     },
@@ -44,6 +43,21 @@ export const Sidebar = () => {
           name: "Pagamentos",
           path: "/pagamentos",
           icon: <CreditCard size={18} />,
+        },
+        {
+          name: "Categorias",
+          path: "/categorias",
+          icon: <CategoryIcon size={18} />,
+        },
+        {
+          name: "Clientes",
+          path: "/clientes",
+          icon: <Users size={18} />,
+        },
+        {
+          name: "Investimentos",
+          path: "/investimentos",
+          icon: <CircleDollarSign size={18} />,
         },
       ],
     },

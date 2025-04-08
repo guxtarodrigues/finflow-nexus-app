@@ -8,6 +8,9 @@ import { MainLayout } from "./components/layout/MainLayout";
 import Dashboard from "./pages/Dashboard";
 import Movimentacoes from "./pages/Movimentacoes";
 import Pagamentos from "./pages/Pagamentos";
+import Categorias from "./pages/Categorias";
+import Clientes from "./pages/Clientes";
+import Investimentos from "./pages/Investimentos";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -31,6 +34,9 @@ const App = () => (
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/movimentacoes" element={<Movimentacoes />} />
                 <Route path="/pagamentos" element={<Pagamentos />} />
+                <Route path="/categorias" element={<Categorias />} />
+                <Route path="/clientes" element={<Clientes />} />
+                <Route path="/investimentos" element={<Investimentos />} />
               </Route>
             </Route>
             
