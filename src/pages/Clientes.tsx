@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   Users, 
@@ -34,7 +33,8 @@ import {
   SheetContent, 
   SheetDescription, 
   SheetHeader, 
-  SheetTitle
+  SheetTitle,
+  SheetFooter
 } from "@/components/ui/sheet";
 import {
   Select,
@@ -63,6 +63,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Label } from "@/components/ui/label";
 import { Client, NewClient } from "@/types/clients";
+import { ClientTransactionsList } from "@/components/clients/ClientTransactionsList";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Clientes = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -75,7 +77,6 @@ const Clientes = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   
-  // New client form state
   const [newClient, setNewClient] = useState<Omit<NewClient, 'user_id'>>({
     name: "",
     email: "",
@@ -88,7 +89,6 @@ const Clientes = () => {
     description: ""
   });
   
-  // Date picker states
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [endDateOpen, setEndDateOpen] = useState(false);
   
@@ -448,7 +448,6 @@ const Clientes = () => {
         </CardContent>
       </Card>
       
-      {/* Create Client Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-md bg-[#1A1A1E] border-[#2A2A2E] text-white">
           <DialogHeader>
@@ -620,9 +619,8 @@ const Clientes = () => {
         </DialogContent>
       </Dialog>
       
-      {/* Edit Client Sheet */}
       <Sheet open={isEditSheetOpen && selectedClient !== null} onOpenChange={setIsEditSheetOpen}>
-        <SheetContent className="sm:max-w-md">
+        <SheetContent className="sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Editar Cliente</SheetTitle>
             <SheetDescription>
@@ -631,152 +629,166 @@ const Clientes = () => {
           </SheetHeader>
           {selectedClient && (
             <div className="py-4 space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Nome do Cliente</Label>
-                <Input
-                  id="edit-name"
-                  value={selectedClient.name}
-                  onChange={(e) => setSelectedClient({...selectedClient, name: e.target.value})}
-                />
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-email">Email</Label>
-                  <Input
-                    id="edit-email"
-                    type="email"
-                    value={selectedClient.email || ""}
-                    onChange={(e) => setSelectedClient({...selectedClient, email: e.target.value || null})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-phone">Telefone</Label>
-                  <Input
-                    id="edit-phone"
-                    value={selectedClient.phone || ""}
-                    onChange={(e) => setSelectedClient({...selectedClient, phone: e.target.value || null})}
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-contract_start">Início do Contrato</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left font-normal"
-                      >
-                        <Calendar className="mr-2 h-4 w-4" />
-                        {selectedClient.contract_start ? (
-                          format(new Date(selectedClient.contract_start), 'dd/MM/yyyy')
-                        ) : (
-                          <span className="text-muted-foreground">Selecione uma data</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <CalendarComponent
-                        mode="single"
-                        selected={selectedClient.contract_start ? new Date(selectedClient.contract_start) : undefined}
-                        onSelect={(date) => setSelectedClient({...selectedClient, contract_start: date ? date.toISOString() : null})}
-                        initialFocus
-                        className="p-3 pointer-events-auto"
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-contract_end">Fim do Contrato</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left font-normal"
-                      >
-                        <Calendar className="mr-2 h-4 w-4" />
-                        {selectedClient.contract_end ? (
-                          format(new Date(selectedClient.contract_end), 'dd/MM/yyyy')
-                        ) : (
-                          <span className="text-muted-foreground">Selecione uma data</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <CalendarComponent
-                        mode="single"
-                        selected={selectedClient.contract_end ? new Date(selectedClient.contract_end) : undefined}
-                        onSelect={(date) => setSelectedClient({...selectedClient, contract_end: date ? date.toISOString() : null})}
-                        initialFocus
-                        className="p-3 pointer-events-auto"
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-monthly_value">Valor Mensal</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5">R$</span>
+              <Tabs defaultValue="info" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="info">Informações</TabsTrigger>
+                  <TabsTrigger value="transactions">Transações</TabsTrigger>
+                </TabsList>
+                <TabsContent value="info" className="mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-name">Nome do Cliente</Label>
                     <Input
-                      id="edit-monthly_value"
-                      type="number"
-                      className="pl-9"
-                      value={selectedClient.monthly_value || ""}
-                      onChange={(e) => setSelectedClient({...selectedClient, monthly_value: parseFloat(e.target.value) || 0})}
+                      id="edit-name"
+                      value={selectedClient.name}
+                      onChange={(e) => setSelectedClient({...selectedClient, name: e.target.value})}
                     />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-status">Status</Label>
-                  <Select
-                    value={selectedClient.status || "active"}
-                    onValueChange={(value: 'active' | 'inactive') => 
-                      setSelectedClient({...selectedClient, status: value})
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Ativo</SelectItem>
-                      <SelectItem value="inactive">Inativo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="edit-recurring_payment"
-                  checked={selectedClient.recurring_payment}
-                  onCheckedChange={(checked) => setSelectedClient({...selectedClient, recurring_payment: checked})}
-                />
-                <Label htmlFor="edit-recurring_payment">Pagamento Recorrente</Label>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="edit-description">Descrição</Label>
-                <Textarea
-                  id="edit-description"
-                  className="min-h-[100px]"
-                  value={selectedClient.description || ""}
-                  onChange={(e) => setSelectedClient({...selectedClient, description: e.target.value || null})}
-                />
-              </div>
-              
-              <div className="flex justify-end gap-2 pt-4">
-                <Button variant="outline" onClick={() => setIsEditSheetOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button className="bg-fin-green text-black hover:bg-fin-green/90" onClick={handleUpdateClient}>
-                  Salvar alterações
-                </Button>
-              </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-email">Email</Label>
+                      <Input
+                        id="edit-email"
+                        type="email"
+                        value={selectedClient.email || ""}
+                        onChange={(e) => setSelectedClient({...selectedClient, email: e.target.value || null})}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-phone">Telefone</Label>
+                      <Input
+                        id="edit-phone"
+                        value={selectedClient.phone || ""}
+                        onChange={(e) => setSelectedClient({...selectedClient, phone: e.target.value || null})}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-contract_start">Início do Contrato</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal"
+                          >
+                            <Calendar className="mr-2 h-4 w-4" />
+                            {selectedClient.contract_start ? (
+                              format(new Date(selectedClient.contract_start), 'dd/MM/yyyy')
+                            ) : (
+                              <span className="text-muted-foreground">Selecione uma data</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <CalendarComponent
+                            mode="single"
+                            selected={selectedClient.contract_start ? new Date(selectedClient.contract_start) : undefined}
+                            onSelect={(date) => setSelectedClient({...selectedClient, contract_start: date ? date.toISOString() : null})}
+                            initialFocus
+                            className="p-3 pointer-events-auto"
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-contract_end">Fim do Contrato</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal"
+                          >
+                            <Calendar className="mr-2 h-4 w-4" />
+                            {selectedClient.contract_end ? (
+                              format(new Date(selectedClient.contract_end), 'dd/MM/yyyy')
+                            ) : (
+                              <span className="text-muted-foreground">Selecione uma data</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <CalendarComponent
+                            mode="single"
+                            selected={selectedClient.contract_end ? new Date(selectedClient.contract_end) : undefined}
+                            onSelect={(date) => setSelectedClient({...selectedClient, contract_end: date ? date.toISOString() : null})}
+                            initialFocus
+                            className="p-3 pointer-events-auto"
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-monthly_value">Valor Mensal</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5">R$</span>
+                        <Input
+                          id="edit-monthly_value"
+                          type="number"
+                          className="pl-9"
+                          value={selectedClient.monthly_value || ""}
+                          onChange={(e) => setSelectedClient({...selectedClient, monthly_value: parseFloat(e.target.value) || 0})}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-status">Status</Label>
+                      <Select
+                        value={selectedClient.status || "active"}
+                        onValueChange={(value: 'active' | 'inactive') => 
+                          setSelectedClient({...selectedClient, status: value})
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Ativo</SelectItem>
+                          <SelectItem value="inactive">Inativo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="edit-recurring_payment"
+                      checked={selectedClient.recurring_payment}
+                      onCheckedChange={(checked) => setSelectedClient({...selectedClient, recurring_payment: checked})}
+                    />
+                    <Label htmlFor="edit-recurring_payment">Pagamento Recorrente</Label>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-description">Descrição</Label>
+                    <Textarea
+                      id="edit-description"
+                      className="min-h-[100px]"
+                      value={selectedClient.description || ""}
+                      onChange={(e) => setSelectedClient({...selectedClient, description: e.target.value || null})}
+                    />
+                  </div>
+                  
+                  <div className="flex justify-end gap-2 pt-4">
+                    <Button variant="outline" onClick={() => setIsEditSheetOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button className="bg-fin-green text-black hover:bg-fin-green/90" onClick={handleUpdateClient}>
+                      Salvar alterações
+                    </Button>
+                  </div>
+                </TabsContent>
+                <TabsContent value="transactions" className="mt-4">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Recebimentos do Cliente</h3>
+                    <ClientTransactionsList clientId={selectedClient.id} />
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
           )}
         </SheetContent>
