@@ -8,6 +8,10 @@ interface Payment {
   description: string;
   value: number;
   status: string;
+  recipient: string;
+  payment_method: string;
+  recurrence: string;
+  category_id?: string;
 }
 
 interface PaymentCalendarViewProps {
