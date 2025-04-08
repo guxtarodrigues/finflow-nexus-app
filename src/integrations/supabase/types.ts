@@ -222,6 +222,8 @@ export type Database = {
           date: string
           description: string
           id: string
+          recurrence: string | null
+          recurrence_count: number | null
           status: string
           type: string
           updated_at: string
@@ -236,6 +238,8 @@ export type Database = {
           date?: string
           description: string
           id?: string
+          recurrence?: string | null
+          recurrence_count?: number | null
           status?: string
           type: string
           updated_at?: string
@@ -250,6 +254,8 @@ export type Database = {
           date?: string
           description?: string
           id?: string
+          recurrence?: string | null
+          recurrence_count?: number | null
           status?: string
           type?: string
           updated_at?: string

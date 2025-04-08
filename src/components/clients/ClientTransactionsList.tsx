@@ -23,8 +23,8 @@ interface Transaction {
   type: string;
   value: number;
   status: string;
-  recurrence?: string;
-  recurrence_count?: number;
+  recurrence?: string | null;
+  recurrence_count?: number | null;
 }
 
 interface ClientTransactionsListProps {
