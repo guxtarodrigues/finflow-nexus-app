@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { MetricCard } from "@/components/dashboard/MetricCard";
@@ -77,6 +76,9 @@ const Dashboard = () => {
       const prevMonthStart = startOfMonth(subMonths(new Date(), 1));
       const prevMonthEnd = endOfMonth(subMonths(new Date(), 1));
       
+      const currentDate = new Date();
+      const now = new Date();
+      
       const { data: transactions, error: transactionsError } = await supabase
         .from('transactions')
         .select('*')
@@ -95,8 +97,6 @@ const Dashboard = () => {
       let processedPayments: Payment[] = [];
       
       if (originalPayments && originalPayments.length > 0) {
-        const currentDate = new Date();
-        
         originalPayments.forEach(payment => {
           processedPayments.push(payment as Payment);
           
@@ -208,8 +208,6 @@ const Dashboard = () => {
       const taxPayable = (totalIncome + monthlyClientIncome) * 0.06;
       
       const totalBalance = totalIncome - totalExpense + monthlyClientIncome;
-      
-      const now = new Date(); // Defining the 'now' variable that was missing
       
       const paymentsReceived = allPayments
         ? allPayments.filter(payment => payment.status === 'completed').reduce((sum, payment) => sum + Number(payment.value), 0)
