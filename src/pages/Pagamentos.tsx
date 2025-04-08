@@ -936,3 +936,449 @@ const Pagamentos = () => {
         
         <Card>
           <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">
+              <div className="flex items-center">
+                <div className="mr-2 p-2 bg-fin-red/10 rounded">
+                  <AlertCircle className="h-4 w-4 text-fin-red" />
+                </div>
+                Pagamentos Atrasados
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalOverdue)}</div>
+            <p className="text-xs text-muted-foreground">
+              {payments.filter(p => p.status === 'overdue').length} pagamentos atrasados no mês
+            </p>
+            <div className="mt-4">
+              <span className="text-xs font-medium inline-flex items-center">
+                <RefreshCw className="h-3 w-3 mr-1" /> {dashboardData.totalRecurring} pagamentos recorrentes
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row gap-4 justify-between">
+          <div className="flex items-center space-x-2">
+            <DateFilter 
+              dateRange={dateRange}
+              dateFilterMode={dateFilterMode}
+              onPrevMonth={() => setDateFilterMode("prev")}
+              onNextMonth={() => setDateFilterMode("next")}
+              onCurrentMonth={() => setDateFilterMode("current")}
+              onDateRangeChange={(range) => {
+                setDateRange(range);
+                setDateFilterMode("custom");
+              }}
+              currentDate={currentDate}
+            />
+          </div>
+          
+          <div className="flex space-x-2">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Buscar pagamentos..."
+                className="pl-8 bg-[#1F1F23] border-[#2A2A2E]"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            
+            <Button
+              variant="outline"
+              size="icon"
+              className="border-[#2A2A2E] bg-[#1F1F23]"
+              onClick={() => setViewMode(viewMode === "list" ? "calendar" : "list")}
+            >
+              {viewMode === "list" ? <Calendar className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
+        
+        <Tabs 
+          defaultValue="all" 
+          className="w-full" 
+          value={activeTab}
+          onValueChange={(value) => {
+            setActiveTab(value);
+            if (value === "all") {
+              setFilterStatus(null);
+            } else if (value === "pending") {
+              setFilterStatus("pending");
+            } else if (value === "completed") {
+              setFilterStatus("completed");
+            } else if (value === "overdue") {
+              setFilterStatus("overdue");
+            }
+          }}
+        >
+          <TabsList className="mb-4 bg-[#1F1F23]">
+            <TabsTrigger value="all">Todos</TabsTrigger>
+            <TabsTrigger value="pending">Pendentes</TabsTrigger>
+            <TabsTrigger value="completed">Pagos</TabsTrigger>
+            <TabsTrigger value="overdue">Atrasados</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="all" className="mt-0">
+            {viewMode === "list" ? (
+              <div className="rounded-xl border border-[#2A2A2E] bg-[#1A1A1E]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Destinatário</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Recorrência</TableHead>
+                      <TableHead>Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          <div className="flex justify-center items-center h-full">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            <span className="ml-2 text-muted-foreground">Carregando pagamentos...</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : payments.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          <div className="flex flex-col justify-center items-center h-full">
+                            <CreditCard className="h-10 w-10 text-muted-foreground mb-2" />
+                            <p className="text-muted-foreground">Nenhum pagamento encontrado</p>
+                            <Button 
+                              variant="outline" 
+                              className="mt-2"
+                              onClick={() => setIsDialogOpen(true)}
+                            >
+                              <Plus className="mr-2 h-4 w-4" />
+                              Adicionar Pagamento
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      payments
+                        .filter(payment => 
+                          payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          payment.recipient.toLowerCase().includes(searchTerm.toLowerCase())
+                        )
+                        .map((payment) => (
+                          <TableRow key={payment.id} className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
+                            <TableCell>{payment.description}</TableCell>
+                            <TableCell>{payment.recipient}</TableCell>
+                            <TableCell>{payment.due_date}</TableCell>
+                            <TableCell>{formatCurrency(payment.value)}</TableCell>
+                            <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                            <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
+                            <TableCell>
+                              <div className="flex space-x-2">
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
+                                  onClick={() => {
+                                    setSelectedPayment(payment);
+                                    setIsUpdateSheetOpen(true);
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                {payment.status !== 'completed' && (
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
+                                    onClick={() => handleMarkAsPaid(payment.id)}
+                                  >
+                                    <CheckCircle className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <PaymentCalendarView 
+                payments={payments} 
+                onSelectDate={(date) => {
+                  // TODO: Implementar a ação ao selecionar uma data no calendário
+                }}
+              />
+            )}
+          </TabsContent>
+          
+          <TabsContent value="pending" className="mt-0">
+            {viewMode === "list" ? (
+              <div className="rounded-xl border border-[#2A2A2E] bg-[#1A1A1E]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Destinatário</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Recorrência</TableHead>
+                      <TableHead>Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          <div className="flex justify-center items-center h-full">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            <span className="ml-2 text-muted-foreground">Carregando pagamentos...</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : payments.filter(p => p.status === 'pending').length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          <div className="flex flex-col justify-center items-center h-full">
+                            <CreditCard className="h-10 w-10 text-muted-foreground mb-2" />
+                            <p className="text-muted-foreground">Nenhum pagamento pendente encontrado</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      payments
+                        .filter(payment => 
+                          payment.status === 'pending' &&
+                          (payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          payment.recipient.toLowerCase().includes(searchTerm.toLowerCase()))
+                        )
+                        .map((payment) => (
+                          <TableRow key={payment.id} className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
+                            <TableCell>{payment.description}</TableCell>
+                            <TableCell>{payment.recipient}</TableCell>
+                            <TableCell>{payment.due_date}</TableCell>
+                            <TableCell>{formatCurrency(payment.value)}</TableCell>
+                            <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                            <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
+                            <TableCell>
+                              <div className="flex space-x-2">
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
+                                  onClick={() => {
+                                    setSelectedPayment(payment);
+                                    setIsUpdateSheetOpen(true);
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
+                                  onClick={() => handleMarkAsPaid(payment.id)}
+                                >
+                                  <CheckCircle className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <PaymentCalendarView 
+                payments={payments.filter(p => p.status === 'pending')} 
+                onSelectDate={(date) => {
+                  // TODO: Implementar a ação ao selecionar uma data no calendário
+                }}
+              />
+            )}
+          </TabsContent>
+          
+          <TabsContent value="completed" className="mt-0">
+            {viewMode === "list" ? (
+              <div className="rounded-xl border border-[#2A2A2E] bg-[#1A1A1E]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Destinatário</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Recorrência</TableHead>
+                      <TableHead>Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          <div className="flex justify-center items-center h-full">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            <span className="ml-2 text-muted-foreground">Carregando pagamentos...</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : payments.filter(p => p.status === 'completed').length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          <div className="flex flex-col justify-center items-center h-full">
+                            <CreditCard className="h-10 w-10 text-muted-foreground mb-2" />
+                            <p className="text-muted-foreground">Nenhum pagamento realizado encontrado</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      payments
+                        .filter(payment => 
+                          payment.status === 'completed' &&
+                          (payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          payment.recipient.toLowerCase().includes(searchTerm.toLowerCase()))
+                        )
+                        .map((payment) => (
+                          <TableRow key={payment.id} className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
+                            <TableCell>{payment.description}</TableCell>
+                            <TableCell>{payment.recipient}</TableCell>
+                            <TableCell>{payment.due_date}</TableCell>
+                            <TableCell>{formatCurrency(payment.value)}</TableCell>
+                            <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                            <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
+                            <TableCell>
+                              <div className="flex space-x-2">
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
+                                  onClick={() => {
+                                    setSelectedPayment(payment);
+                                    setIsUpdateSheetOpen(true);
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <PaymentCalendarView 
+                payments={payments.filter(p => p.status === 'completed')} 
+                onSelectDate={(date) => {
+                  // TODO: Implementar a ação ao selecionar uma data no calendário
+                }}
+              />
+            )}
+          </TabsContent>
+          
+          <TabsContent value="overdue" className="mt-0">
+            {viewMode === "list" ? (
+              <div className="rounded-xl border border-[#2A2A2E] bg-[#1A1A1E]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Destinatário</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Recorrência</TableHead>
+                      <TableHead>Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          <div className="flex justify-center items-center h-full">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            <span className="ml-2 text-muted-foreground">Carregando pagamentos...</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : payments.filter(p => p.status === 'overdue').length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          <div className="flex flex-col justify-center items-center h-full">
+                            <CreditCard className="h-10 w-10 text-muted-foreground mb-2" />
+                            <p className="text-muted-foreground">Nenhum pagamento atrasado encontrado</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      payments
+                        .filter(payment => 
+                          payment.status === 'overdue' &&
+                          (payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          payment.recipient.toLowerCase().includes(searchTerm.toLowerCase()))
+                        )
+                        .map((payment) => (
+                          <TableRow key={payment.id} className="hover:bg-[#2A2A2E]/50 border-[#2A2A2E]">
+                            <TableCell>{payment.description}</TableCell>
+                            <TableCell>{payment.recipient}</TableCell>
+                            <TableCell>{payment.due_date}</TableCell>
+                            <TableCell>{formatCurrency(payment.value)}</TableCell>
+                            <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                            <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
+                            <TableCell>
+                              <div className="flex space-x-2">
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
+                                  onClick={() => {
+                                    setSelectedPayment(payment);
+                                    setIsUpdateSheetOpen(true);
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 border-[#2A2A2E] bg-[#1F1F23]"
+                                  onClick={() => handleMarkAsPaid(payment.id)}
+                                >
+                                  <CheckCircle className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <PaymentCalendarView 
+                payments={payments.filter(p => p.status === 'overdue')} 
+                onSelectDate={(date) => {
+                  // TODO: Implementar a ação ao selecionar uma data no calendário
+                }}
+              />
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+};
+
+export default Pagamentos;
