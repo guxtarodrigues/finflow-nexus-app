@@ -202,9 +202,31 @@ const Dashboard = () => {
       const totalIncome = incomeTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
       const totalExpense = expenseTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
       
-      // Calculate clients income (recurring payments)
+      // Calculate clients income for clients that have already paid this month
+      // Only count clients that have completed 'income' transactions this month
       const currentDate = new Date();
+      const currentMonthStart_ISO = currentMonthStart.toISOString();
+      const currentMonthEnd_ISO = currentMonthEnd.toISOString();
       
+      // Get client payments actually received this month
+      const { data: clientPaymentsThisMonth, error: clientPaymentsError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('type', 'income')
+        .not('client_id', 'is', null) // Only transactions related to clients
+        .eq('status', 'completed') // Only completed payments
+        .gte('date', currentMonthStart_ISO)
+        .lte('date', currentMonthEnd_ISO);
+        
+      if (clientPaymentsError) throw clientPaymentsError;
+      
+      // Calculate actual received client income this month
+      const actualClientIncome = clientPaymentsThisMonth
+        ? clientPaymentsThisMonth.reduce((sum, tx) => sum + Number(tx.value), 0)
+        : 0;
+      
+      // Calculate potential monthly income from clients (for forecasting)
       const monthlyClientIncome = activeClients
         .filter(client => 
           client.recurring_payment && 
@@ -231,10 +253,10 @@ const Dashboard = () => {
       const nextMonthForecast = currentMonthIncome + nextMonthClientsIncome - currentMonthExpense;
       
       // Calculate tax (6% of income)
-      const taxPayable = (totalIncome + monthlyClientIncome) * 0.06;
+      const taxPayable = (totalIncome) * 0.06;
       
-      // Total balance includes client income
-      const totalBalance = totalIncome - totalExpense + monthlyClientIncome;
+      // Total balance ONLY includes ACTUAL received income (not expected monthly client income)
+      const totalBalance = totalIncome - totalExpense;
       
       // Calculate payment statistics
       const now = new Date();
@@ -268,7 +290,7 @@ const Dashboard = () => {
       // Update financial data state with properly typed data
       setFinancialData({
         totalBalance,
-        monthlyIncome: currentMonthIncome + monthlyClientIncome,
+        monthlyIncome: currentMonthIncome, // Only include actual registered income
         monthlyExpense: currentMonthExpense,
         totalSavings: totalBalance * 0.2, // Assuming 20% of net income is saved
         yearlyForecast,
@@ -276,7 +298,7 @@ const Dashboard = () => {
         activeClients: activeClients.length,
         taxPayable,
         upcomingPayments: upcomingPayments as Payment[] || [],
-        clientsIncome: monthlyClientIncome,
+        clientsIncome: actualClientIncome, // Use only the actual received client income
         paymentsReceived,
         pendingPayments,
         overduePayments
@@ -356,7 +378,6 @@ const Dashboard = () => {
             />
           </div>
 
-          {/* New section for payment status cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
               <div className="flex justify-between items-center mb-4">
