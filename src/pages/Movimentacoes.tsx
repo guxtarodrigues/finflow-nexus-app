@@ -2,12 +2,14 @@
 import { useState, useEffect } from "react";
 import { 
   ArrowLeftRight, 
-  ChevronDown, 
   Download, 
   Filter, 
   Plus, 
   Search,
-  Loader2 
+  Loader2,
+  ArrowUpRight,
+  ArrowDownRight,
+  Tag
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,7 +20,6 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +28,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { TransactionList } from "@/components/transactions/TransactionList";
 import { DateFilter } from "@/components/payments/DateFilter";
 import { startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
+import { BlurModal } from "@/components/ui/blur-modal";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Category } from "@/types";
 
 // Define the Transaction type based on the database schema
 interface Transaction {
@@ -34,6 +40,7 @@ interface Transaction {
   date: string;
   description: string;
   category: string;
+  category_id?: string;
   type: string;
   value: number;
   status: string;
@@ -43,8 +50,10 @@ const Movimentacoes = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [filterType, setFilterType] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [activeTab, setActiveTab] = useState("all");
   const { user } = useAuth();
   
   // Date filter states
@@ -61,9 +70,9 @@ const Movimentacoes = () => {
   // New transaction form state
   const [newTransaction, setNewTransaction] = useState({
     description: "",
-    category: "",
+    category_id: "",
     type: "income",
-    value: ""
+    value: 0
   });
   
   const { toast } = useToast();
@@ -71,6 +80,7 @@ const Movimentacoes = () => {
   useEffect(() => {
     if (user) {
       fetchTransactions();
+      fetchCategories();
     }
   }, [filterType, user, dateRange]);
 
@@ -136,6 +146,7 @@ const Movimentacoes = () => {
         date: format(new Date(item.date), 'dd/MM/yyyy'),
         description: item.description,
         category: item.category,
+        category_id: item.category_id,
         type: item.type,
         value: Number(item.value),
         status: item.status
@@ -154,11 +165,44 @@ const Movimentacoes = () => {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      if (!user) return;
+      
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('name', { ascending: true });
+      
+      if (error) throw error;
+      
+      setCategories(data || []);
+    } catch (error: any) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
+  const filteredCategories = (type: string) => {
+    return categories.filter(category => 
+      type === "all" || category.type === type || category.type === "investment"
+    );
+  };
+
+  const getCategoryInfo = (categoryId?: string) => {
+    if (!categoryId) return { name: "", color: "#6E59A5" };
+    const category = categories.find(c => c.id === categoryId);
+    return { 
+      name: category ? category.name : "", 
+      color: category ? category.color || "#6E59A5" : "#6E59A5" 
+    };
+  };
+
   const handleCreateTransaction = async () => {
     try {
       if (!user) return;
       
-      if (!newTransaction.description || !newTransaction.category || !newTransaction.value) {
+      if (!newTransaction.description || !newTransaction.value || !newTransaction.category_id) {
         toast({
           title: "Dados incompletos",
           description: "Preencha todos os campos obrigatórios",
@@ -167,14 +211,17 @@ const Movimentacoes = () => {
         return;
       }
 
+      const categoryInfo = getCategoryInfo(newTransaction.category_id);
+      
       // Insert single object (not an array) and format data correctly
       const { error } = await supabase
         .from('transactions')
         .insert({
           description: newTransaction.description,
-          category: newTransaction.category,
+          category: categoryInfo.name,
+          category_id: newTransaction.category_id,
           type: newTransaction.type,
-          value: Number(newTransaction.value),
+          value: newTransaction.value,
           date: new Date().toISOString(),
           status: 'completed',
           user_id: user.id
@@ -185,11 +232,11 @@ const Movimentacoes = () => {
       // Reset form and close dialog
       setNewTransaction({
         description: "",
-        category: "",
+        category_id: "",
         type: "income",
-        value: ""
+        value: 0
       });
-      setIsDialogOpen(false);
+      setIsModalOpen(false);
       
       // Refresh transaction list
       await fetchTransactions();
@@ -255,11 +302,24 @@ const Movimentacoes = () => {
     setDateFilterMode("custom");
   };
 
-  // Filter transactions based on search term
-  const filteredTransactions = transactions.filter(transaction => 
-    transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    transaction.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filter transactions based on search term and active tab
+  const getFilteredTransactions = () => {
+    return transactions.filter(transaction => {
+      // Filter by search term
+      const matchesSearch = 
+        transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        transaction.category.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Filter by tab
+      if (activeTab === "all") {
+        return matchesSearch;
+      } else if (activeTab === "income" || activeTab === "expense") {
+        return matchesSearch && transaction.type === activeTab;
+      }
+      
+      return matchesSearch;
+    });
+  };
   
   return (
     <div className="space-y-6">
@@ -270,150 +330,194 @@ const Movimentacoes = () => {
             Gerenciamento de receitas e despesas
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-fin-green text-black hover:bg-fin-green/90">
-              <Plus className="mr-2 h-4 w-4" /> Nova Movimentação
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px] bg-[#1A1A1E] border-[#2A2A2E] text-white">
-            <DialogHeader>
-              <DialogTitle>Nova Movimentação</DialogTitle>
-              <DialogDescription>
-                Adicione uma nova transação financeira ao sistema.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="description" className="text-right">
-                  Descrição
-                </Label>
+        <Button 
+          className="bg-fin-green text-black hover:bg-fin-green/90"
+          onClick={() => {
+            setNewTransaction({
+              description: "",
+              category_id: "",
+              type: "income",
+              value: 0
+            });
+            setIsModalOpen(true);
+          }}
+        >
+          <Plus className="mr-2 h-4 w-4" /> Nova Movimentação
+        </Button>
+      </div>
+
+      <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="all">Todas</TabsTrigger>
+          <TabsTrigger value="income">Receitas</TabsTrigger>
+          <TabsTrigger value="expense">Despesas</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="all" className="space-y-5">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg font-normal flex items-center">
+                <ArrowLeftRight className="mr-2 h-5 w-5 text-fin-green" />
+                Todas as Movimentações
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col space-y-4">
+                <div className="flex justify-between items-center flex-wrap gap-2">
+                  <div className="relative w-full max-w-sm">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      placeholder="Buscar movimentações..."
+                      className="pl-8 bg-[#1F1F23] border-[#2A2A2E]"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-2 items-center">
+                    {/* Date filter component */}
+                    <DateFilter 
+                      dateRange={dateRange}
+                      dateFilterMode={dateFilterMode}
+                      onPrevMonth={handlePrevMonth}
+                      onNextMonth={handleNextMonth}
+                      onCurrentMonth={handleCurrentMonth}
+                      onDateRangeChange={handleDateRangeChange}
+                    />
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="border-[#2A2A2E] bg-[#1F1F23]">
+                          <Filter className="mr-2 h-4 w-4" /> Filtrar
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => setFilterType(null)}>
+                          Todas
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setFilterType('income')}>
+                          Receitas
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setFilterType('expense')}>
+                          Despesas
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    
+                    <Button variant="outline" className="border-[#2A2A2E] bg-[#1F1F23]">
+                      <Download className="mr-2 h-4 w-4" /> Exportar
+                    </Button>
+                  </div>
+                </div>
+                
+                <TransactionList 
+                  transactions={getFilteredTransactions()}
+                  categories={categories}
+                  loading={loading}
+                  onDeleteTransaction={handleDeleteTransaction}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="income" className="space-y-5">
+          {/* Similar content as "all" tab but filtered for income */}
+        </TabsContent>
+        
+        <TabsContent value="expense" className="space-y-5">
+          {/* Similar content as "all" tab but filtered for expense */}
+        </TabsContent>
+      </Tabs>
+      
+      {/* Add Transaction Modal */}
+      <BlurModal open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <div className="space-y-4">
+          <div className="text-center sm:text-left">
+            <h2 className="text-lg font-semibold">Nova Movimentação</h2>
+            <p className="text-sm text-muted-foreground">
+              Adicione uma nova transação para controlar suas finanças
+            </p>
+          </div>
+          
+          <Tabs defaultValue={newTransaction.type} onValueChange={(value) => setNewTransaction({...newTransaction, type: value})}>
+            <TabsList className="grid grid-cols-2 mb-4">
+              <TabsTrigger value="income" className="flex items-center gap-2">
+                <ArrowUpRight className="h-4 w-4 text-green-400" /> Receita
+              </TabsTrigger>
+              <TabsTrigger value="expense" className="flex items-center gap-2">
+                <ArrowDownRight className="h-4 w-4 text-red-400" /> Despesa
+              </TabsTrigger>
+            </TabsList>
+            
+            <div className="space-y-4">
+              <div className="grid gap-2">
+                <Label htmlFor="description">Descrição</Label>
                 <Input
                   id="description"
-                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
+                  className="bg-white/10 border-white/20"
                   value={newTransaction.description}
                   onChange={(e) => setNewTransaction({...newTransaction, description: e.target.value})}
                 />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="category" className="text-right">
-                  Categoria
+              
+              <div className="grid gap-2">
+                <Label htmlFor="category" className="flex items-center gap-2">
+                  <Tag className="h-4 w-4" /> Categoria
                 </Label>
-                <Input
-                  id="category"
-                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
-                  value={newTransaction.category}
-                  onChange={(e) => setNewTransaction({...newTransaction, category: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="type" className="text-right">
-                  Tipo
-                </Label>
-                <select
-                  id="type"
-                  className="col-span-3 bg-[#1F1F23] border border-[#2A2A2E] rounded-md h-10 px-3 text-base focus:outline-none"
-                  value={newTransaction.type}
-                  onChange={(e) => setNewTransaction({...newTransaction, type: e.target.value})}
+                <Select
+                  value={newTransaction.category_id}
+                  onValueChange={(value) => setNewTransaction({...newTransaction, category_id: value})}
                 >
-                  <option value="income">Receita</option>
-                  <option value="expense">Despesa</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="value" className="text-right">
-                  Valor
-                </Label>
-                <Input
-                  id="value"
-                  type="number"
-                  step="0.01"
-                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
-                  value={newTransaction.value}
-                  onChange={(e) => setNewTransaction({...newTransaction, value: e.target.value})}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button 
-                className="bg-fin-green text-black hover:bg-fin-green/90" 
-                onClick={handleCreateTransaction}
-              >
-                Salvar
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="flex flex-col space-y-5">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg font-normal flex items-center">
-              <ArrowLeftRight className="mr-2 h-5 w-5 text-fin-green" />
-              Todas as Movimentações
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col space-y-4">
-              <div className="flex justify-between items-center flex-wrap gap-2">
-                <div className="relative w-full max-w-sm">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="search"
-                    placeholder="Buscar movimentações..."
-                    className="pl-8 bg-[#1F1F23] border-[#2A2A2E]"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-                
-                <div className="flex flex-wrap gap-2 items-center">
-                  {/* Date filter component */}
-                  <DateFilter 
-                    dateRange={dateRange}
-                    dateFilterMode={dateFilterMode}
-                    onPrevMonth={handlePrevMonth}
-                    onNextMonth={handleNextMonth}
-                    onCurrentMonth={handleCurrentMonth}
-                    onDateRangeChange={handleDateRangeChange}
-                  />
-                  
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="border-[#2A2A2E] bg-[#1F1F23]">
-                        <Filter className="mr-2 h-4 w-4" /> Filtrar
-                        <ChevronDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem onClick={() => setFilterType(null)}>
-                        Todas
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setFilterType('income')}>
-                        Receitas
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setFilterType('expense')}>
-                        Despesas
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  
-                  <Button variant="outline" className="border-[#2A2A2E] bg-[#1F1F23]">
-                    <Download className="mr-2 h-4 w-4" /> Exportar
-                  </Button>
-                </div>
+                  <SelectTrigger id="category" className="bg-white/10 border-white/20">
+                    <SelectValue placeholder="Selecione uma categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredCategories(newTransaction.type).map(category => (
+                      <SelectItem key={category.id} value={category.id}>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: category.color || "#6E59A5" }}
+                          />
+                          {category.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               
-              <TransactionList 
-                transactions={filteredTransactions}
-                loading={loading}
-                onDeleteTransaction={handleDeleteTransaction}
-              />
+              <div className="grid gap-2">
+                <Label htmlFor="value">Valor</Label>
+                <CurrencyInput
+                  id="value"
+                  className="bg-white/10 border-white/20"
+                  value={newTransaction.value}
+                  onValueChange={(value) => setNewTransaction({...newTransaction, value})}
+                />
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </Tabs>
+          
+          <div className="flex justify-end gap-2 mt-6">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsModalOpen(false)}
+              className="border-white/20"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              className={newTransaction.type === "income" ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600"}
+              onClick={handleCreateTransaction}
+            >
+              Salvar
+            </Button>
+          </div>
+        </div>
+      </BlurModal>
     </div>
   );
 };

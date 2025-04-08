@@ -2,7 +2,6 @@
 import { useState, useEffect } from "react";
 import { 
   CreditCard, 
-  ChevronDown, 
   Download, 
   Filter, 
   Plus, 
@@ -16,7 +15,9 @@ import {
   Repeat,
   Banknote,
   ArrowRight,
-  LayoutGrid
+  LayoutGrid,
+  Users,
+  Tag
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,16 +37,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format, startOfMonth, endOfMonth, subMonths, addMonths, parseISO, isWithinInterval } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { PaymentCalendarView } from "@/components/payments/PaymentCalendarView";
 import { DateFilter } from "@/components/payments/DateFilter";
+import { StatusSelect } from "@/components/payments/StatusSelect";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { BlurModal } from "@/components/ui/blur-modal";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Category, Client } from "@/types";
 
 interface Payment {
   id: string;
@@ -56,6 +61,8 @@ interface Payment {
   status: string;
   payment_method: string;
   recurrence: string;
+  category_id?: string;
+  client_id?: string;
 }
 
 const getStatusBadge = (status: string) => {
@@ -118,12 +125,14 @@ const Pagamentos = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isPaymentModal, setIsPaymentModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("all");
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [isUpdateSheetOpen, setIsUpdateSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const { user } = useAuth();
   
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -139,11 +148,13 @@ const Pagamentos = () => {
   const [newPayment, setNewPayment] = useState({
     description: "",
     recipient: "",
-    value: "",
-    due_date: "",
+    value: 0,
+    due_date: format(new Date(), "yyyy-MM-dd"),
     payment_method: "Transferência",
     recurrence: "Mensal",
-    status: "pending"
+    status: "pending",
+    category_id: "",
+    client_id: ""
   });
   
   const { toast } = useToast();
@@ -151,6 +162,8 @@ const Pagamentos = () => {
   useEffect(() => {
     if (user) {
       fetchPayments();
+      fetchCategories();
+      fetchClients();
     }
   }, [filterStatus, user, dateRange]);
 
@@ -210,7 +223,9 @@ const Pagamentos = () => {
         value: Number(item.value),
         status: item.status,
         payment_method: item.payment_method,
-        recurrence: item.recurrence
+        recurrence: item.recurrence,
+        category_id: item.category_id,
+        client_id: item.client_id
       }));
       
       const filteredByDate = formattedPayments.filter(payment => {
@@ -234,6 +249,61 @@ const Pagamentos = () => {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      if (!user) return;
+      
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('type', 'expense')
+        .order('name', { ascending: true });
+      
+      if (error) throw error;
+      
+      setCategories(data || []);
+    } catch (error: any) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
+  const fetchClients = async () => {
+    try {
+      if (!user) return;
+      
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('name', { ascending: true });
+      
+      if (error) throw error;
+      
+      setClients(data || []);
+    } catch (error: any) {
+      console.error('Error fetching clients:', error);
+    }
+  };
+
+  const getClientName = (clientId?: string) => {
+    if (!clientId) return "-";
+    const client = clients.find(c => c.id === clientId);
+    return client ? client.name : "-";
+  };
+
+  const getCategoryName = (categoryId?: string) => {
+    if (!categoryId) return "-";
+    const category = categories.find(c => c.id === categoryId);
+    return category ? category.name : "-";
+  };
+
+  const getCategoryColor = (categoryId?: string) => {
+    if (!categoryId) return "#6E59A5";
+    const category = categories.find(c => c.id === categoryId);
+    return category?.color || "#6E59A5";
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -247,7 +317,20 @@ const Pagamentos = () => {
         <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
           <Button 
             className="w-full sm:w-auto" 
-            onClick={() => setIsDialogOpen(true)}
+            onClick={() => {
+              setNewPayment({
+                description: "",
+                recipient: "",
+                value: 0,
+                due_date: format(new Date(), "yyyy-MM-dd"),
+                payment_method: "Transferência",
+                recurrence: "Mensal",
+                status: "pending",
+                category_id: "",
+                client_id: ""
+              });
+              setIsPaymentModal(true);
+            }}
           >
             <Plus className="mr-2 h-4 w-4" /> Novo Pagamento
           </Button>
@@ -257,7 +340,6 @@ const Pagamentos = () => {
               <Button variant="outline" className="w-full sm:w-auto">
                 <Download className="mr-2 h-4 w-4" />
                 Exportar
-                <ChevronDown className="ml-2 h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
@@ -359,6 +441,8 @@ const Pagamentos = () => {
                       <TableRow>
                         <TableHead>Descrição</TableHead>
                         <TableHead>Destinatário</TableHead>
+                        <TableHead>Categoria</TableHead>
+                        <TableHead>Cliente</TableHead>
                         <TableHead>Vencimento</TableHead>
                         <TableHead>Valor</TableHead>
                         <TableHead>Status</TableHead>
@@ -379,6 +463,18 @@ const Pagamentos = () => {
                           <TableRow key={payment.id}>
                             <TableCell className="font-medium">{payment.description}</TableCell>
                             <TableCell>{payment.recipient}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {payment.category_id && (
+                                  <div 
+                                    className="w-3 h-3 rounded-full" 
+                                    style={{ backgroundColor: getCategoryColor(payment.category_id) }}
+                                  />
+                                )}
+                                {getCategoryName(payment.category_id)}
+                              </div>
+                            </TableCell>
+                            <TableCell>{getClientName(payment.client_id)}</TableCell>
                             <TableCell>{payment.due_date}</TableCell>
                             <TableCell>
                               {payment.value.toLocaleString('pt-BR', { 
@@ -434,44 +530,100 @@ const Pagamentos = () => {
         </TabsContent>
       </Tabs>
       
-      {/* Add Payment Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Adicionar Pagamento</DialogTitle>
-            <DialogDescription>
-              Adicione um novo pagamento para controlar suas finanças.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="description">Descrição</Label>
-              <Input
-                id="description"
-                value={newPayment.description}
-                onChange={(e) => setNewPayment({...newPayment, description: e.target.value})}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="recipient">Destinatário</Label>
-              <Input
-                id="recipient"
-                value={newPayment.recipient}
-                onChange={(e) => setNewPayment({...newPayment, recipient: e.target.value})}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+      {/* Add Payment Modal */}
+      <BlurModal open={isPaymentModal} onOpenChange={setIsPaymentModal}>
+        <div className="space-y-4">
+          <div className="text-center sm:text-left">
+            <h2 className="text-lg font-semibold">Adicionar Pagamento</h2>
+            <p className="text-sm text-muted-foreground">
+              Adicione um novo pagamento para controlar suas finanças
+            </p>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="value">Valor</Label>
+                <Label htmlFor="description">Descrição</Label>
                 <Input
-                  id="value"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={newPayment.value}
-                  onChange={(e) => setNewPayment({...newPayment, value: e.target.value})}
+                  id="description"
+                  value={newPayment.description}
+                  onChange={(e) => setNewPayment({...newPayment, description: e.target.value})}
+                  className="bg-white/10 border-white/20"
                 />
               </div>
+              
+              <div className="grid gap-2">
+                <Label htmlFor="recipient">Destinatário</Label>
+                <Input
+                  id="recipient"
+                  value={newPayment.recipient}
+                  onChange={(e) => setNewPayment({...newPayment, recipient: e.target.value})}
+                  className="bg-white/10 border-white/20"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="category" className="flex items-center gap-2">
+                  <Tag className="h-4 w-4" /> Categoria
+                </Label>
+                <Select
+                  value={newPayment.category_id}
+                  onValueChange={(value) => setNewPayment({...newPayment, category_id: value})}
+                >
+                  <SelectTrigger id="category" className="bg-white/10 border-white/20">
+                    <SelectValue placeholder="Selecione uma categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map(category => (
+                      <SelectItem key={category.id} value={category.id}>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: category.color || "#6E59A5" }}
+                          />
+                          {category.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="grid gap-2">
+                <Label htmlFor="client" className="flex items-center gap-2">
+                  <Users className="h-4 w-4" /> Cliente
+                </Label>
+                <Select
+                  value={newPayment.client_id}
+                  onValueChange={(value) => setNewPayment({...newPayment, client_id: value})}
+                >
+                  <SelectTrigger id="client" className="bg-white/10 border-white/20">
+                    <SelectValue placeholder="Selecione um cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map(client => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="value">Valor</Label>
+                <CurrencyInput
+                  id="value"
+                  value={newPayment.value}
+                  onValueChange={(value) => setNewPayment({...newPayment, value})}
+                  className="bg-white/10 border-white/20"
+                />
+              </div>
+              
               <div className="grid gap-2">
                 <Label htmlFor="due_date">Data de Vencimento</Label>
                 <Input
@@ -479,107 +631,121 @@ const Pagamentos = () => {
                   type="date"
                   value={newPayment.due_date}
                   onChange={(e) => setNewPayment({...newPayment, due_date: e.target.value})}
+                  className="bg-white/10 border-white/20"
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="payment_method">Método de Pagamento</Label>
-                <select
-                  id="payment_method"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                <Select
                   value={newPayment.payment_method}
-                  onChange={(e) => setNewPayment({...newPayment, payment_method: e.target.value})}
+                  onValueChange={(value) => setNewPayment({...newPayment, payment_method: value})}
                 >
-                  <option value="Transferência">Transferência</option>
-                  <option value="Cartão de Crédito">Cartão de Crédito</option>
-                  <option value="Boleto">Boleto</option>
-                  <option value="Dinheiro">Dinheiro</option>
-                </select>
+                  <SelectTrigger id="payment_method" className="bg-white/10 border-white/20">
+                    <SelectValue placeholder="Selecione um método" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Transferência">Transferência</SelectItem>
+                    <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
+                    <SelectItem value="Boleto">Boleto</SelectItem>
+                    <SelectItem value="Dinheiro">Dinheiro</SelectItem>
+                    <SelectItem value="Pix">Pix</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+              
               <div className="grid gap-2">
                 <Label htmlFor="recurrence">Recorrência</Label>
-                <select
-                  id="recurrence"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                <Select
                   value={newPayment.recurrence}
-                  onChange={(e) => setNewPayment({...newPayment, recurrence: e.target.value})}
+                  onValueChange={(value) => setNewPayment({...newPayment, recurrence: value})}
                 >
-                  <option value="Único">Único</option>
-                  <option value="Mensal">Mensal</option>
-                  <option value="Trimestral">Trimestral</option>
-                  <option value="Anual">Anual</option>
-                </select>
+                  <SelectTrigger id="recurrence" className="bg-white/10 border-white/20">
+                    <SelectValue placeholder="Selecione a recorrência" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Único">Único</SelectItem>
+                    <SelectItem value="Mensal">Mensal</SelectItem>
+                    <SelectItem value="Trimestral">Trimestral</SelectItem>
+                    <SelectItem value="Anual">Anual</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+            
+            <StatusSelect 
+              status={newPayment.status} 
+              onChange={(status) => setNewPayment({...newPayment, status})}
+            />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+          
+          <div className="flex justify-end gap-2 mt-6">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsPaymentModal(false)}
+              className="border-white/20"
+            >
               Cancelar
             </Button>
-            <Button type="submit" onClick={async () => {
-              try {
-                if (!user) return;
-                
-                if (!newPayment.description || !newPayment.recipient || !newPayment.value || !newPayment.due_date) {
+            <Button 
+              onClick={async () => {
+                try {
+                  if (!user) return;
+                  
+                  if (!newPayment.description || !newPayment.recipient || !newPayment.due_date) {
+                    toast({
+                      title: "Campos obrigatórios",
+                      description: "Preencha todos os campos para continuar.",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+                  
+                  const { error } = await supabase
+                    .from('payments')
+                    .insert({
+                      user_id: user.id,
+                      description: newPayment.description,
+                      recipient: newPayment.recipient,
+                      value: newPayment.value,
+                      due_date: newPayment.due_date,
+                      payment_method: newPayment.payment_method,
+                      recurrence: newPayment.recurrence,
+                      status: newPayment.status,
+                      category_id: newPayment.category_id || null,
+                      client_id: newPayment.client_id || null
+                    });
+                  
+                  if (error) throw error;
+                  
                   toast({
-                    title: "Campos obrigatórios",
-                    description: "Preencha todos os campos para continuar.",
+                    title: "Pagamento adicionado",
+                    description: "O pagamento foi adicionado com sucesso.",
+                  });
+                  
+                  setIsPaymentModal(false);
+                  fetchPayments();
+                } catch (error: any) {
+                  console.error('Error adding payment:', error);
+                  toast({
+                    title: "Erro ao adicionar pagamento",
+                    description: error.message,
                     variant: "destructive"
                   });
-                  return;
                 }
-                
-                const { error } = await supabase
-                  .from('payments')
-                  .insert({
-                    user_id: user.id,
-                    description: newPayment.description,
-                    recipient: newPayment.recipient,
-                    value: parseFloat(newPayment.value),
-                    due_date: newPayment.due_date,
-                    payment_method: newPayment.payment_method,
-                    recurrence: newPayment.recurrence,
-                    status: newPayment.status
-                  });
-                
-                if (error) throw error;
-                
-                toast({
-                  title: "Pagamento adicionado",
-                  description: "O pagamento foi adicionado com sucesso.",
-                });
-                
-                setNewPayment({
-                  description: "",
-                  recipient: "",
-                  value: "",
-                  due_date: "",
-                  payment_method: "Transferência",
-                  recurrence: "Mensal",
-                  status: "pending"
-                });
-                
-                setIsDialogOpen(false);
-                fetchPayments();
-              } catch (error: any) {
-                console.error('Error adding payment:', error);
-                toast({
-                  title: "Erro ao adicionar pagamento",
-                  description: error.message,
-                  variant: "destructive"
-                });
-              }
-            }}>
+              }}
+            >
               Adicionar
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      </BlurModal>
       
       {/* Update Payment Sheet */}
       <Sheet open={isUpdateSheetOpen && selectedPayment !== null} onOpenChange={setIsUpdateSheetOpen}>
-        <SheetContent className="sm:max-w-md">
+        <SheetContent className="sm:max-w-md bg-black/40 backdrop-blur-[45px] border-l border-white/10">
           <SheetHeader>
             <SheetTitle>Detalhes do Pagamento</SheetTitle>
             <SheetDescription>
@@ -587,81 +753,136 @@ const Pagamentos = () => {
             </SheetDescription>
           </SheetHeader>
           {selectedPayment && (
-            <div className="space-y-4 py-4">
-              <div className="grid gap-2">
-                <Label>Descrição</Label>
-                <Input
-                  value={selectedPayment.description}
-                  onChange={(e) => setSelectedPayment({...selectedPayment, description: e.target.value})}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Destinatário</Label>
-                <Input
-                  value={selectedPayment.recipient}
-                  onChange={(e) => setSelectedPayment({...selectedPayment, recipient: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-6 py-6">
+              <div className="grid gap-4">
                 <div className="grid gap-2">
-                  <Label>Valor</Label>
+                  <Label>Descrição</Label>
                   <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={selectedPayment.value}
-                    onChange={(e) => setSelectedPayment({...selectedPayment, value: parseFloat(e.target.value)})}
+                    value={selectedPayment.description}
+                    onChange={(e) => setSelectedPayment({...selectedPayment, description: e.target.value})}
+                    className="bg-white/10 border-white/20"
                   />
                 </div>
+                
+                <div className="grid gap-2">
+                  <Label>Destinatário</Label>
+                  <Input
+                    value={selectedPayment.recipient}
+                    onChange={(e) => setSelectedPayment({...selectedPayment, recipient: e.target.value})}
+                    className="bg-white/10 border-white/20"
+                  />
+                </div>
+                
+                <div className="grid gap-2">
+                  <Label className="flex items-center gap-2">
+                    <Tag className="h-4 w-4" /> Categoria
+                  </Label>
+                  <Select
+                    value={selectedPayment.category_id || ""}
+                    onValueChange={(value) => setSelectedPayment({...selectedPayment, category_id: value})}
+                  >
+                    <SelectTrigger className="bg-white/10 border-white/20">
+                      <SelectValue placeholder="Selecione uma categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map(category => (
+                        <SelectItem key={category.id} value={category.id}>
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: category.color || "#6E59A5" }}
+                            />
+                            {category.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="grid gap-2">
+                  <Label className="flex items-center gap-2">
+                    <Users className="h-4 w-4" /> Cliente
+                  </Label>
+                  <Select
+                    value={selectedPayment.client_id || ""}
+                    onValueChange={(value) => setSelectedPayment({...selectedPayment, client_id: value})}
+                  >
+                    <SelectTrigger className="bg-white/10 border-white/20">
+                      <SelectValue placeholder="Selecione um cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map(client => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="grid gap-2">
+                  <Label>Valor</Label>
+                  <CurrencyInput
+                    value={selectedPayment.value}
+                    onValueChange={(value) => setSelectedPayment({...selectedPayment, value})}
+                    className="bg-white/10 border-white/20"
+                  />
+                </div>
+                
                 <div className="grid gap-2">
                   <Label>Data de Vencimento</Label>
                   <Input
                     type="text"
                     value={selectedPayment.due_date}
                     readOnly
+                    className="bg-white/10 border-white/20"
                   />
                 </div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Status</Label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={selectedPayment.status}
-                  onChange={(e) => setSelectedPayment({...selectedPayment, status: e.target.value})}
-                >
-                  <option value="pending">Pendente</option>
-                  <option value="completed">Pago</option>
-                  <option value="overdue">Atrasado</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+                
                 <div className="grid gap-2">
                   <Label>Método de Pagamento</Label>
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  <Select
                     value={selectedPayment.payment_method}
-                    onChange={(e) => setSelectedPayment({...selectedPayment, payment_method: e.target.value})}
+                    onValueChange={(value) => setSelectedPayment({...selectedPayment, payment_method: value})}
                   >
-                    <option value="Transferência">Transferência</option>
-                    <option value="Cartão de Crédito">Cartão de Crédito</option>
-                    <option value="Boleto">Boleto</option>
-                    <option value="Dinheiro">Dinheiro</option>
-                  </select>
+                    <SelectTrigger className="bg-white/10 border-white/20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Transferência">Transferência</SelectItem>
+                      <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
+                      <SelectItem value="Boleto">Boleto</SelectItem>
+                      <SelectItem value="Dinheiro">Dinheiro</SelectItem>
+                      <SelectItem value="Pix">Pix</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+                
                 <div className="grid gap-2">
                   <Label>Recorrência</Label>
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  <Select
                     value={selectedPayment.recurrence}
-                    onChange={(e) => setSelectedPayment({...selectedPayment, recurrence: e.target.value})}
+                    onValueChange={(value) => setSelectedPayment({...selectedPayment, recurrence: value})}
                   >
-                    <option value="Único">Único</option>
-                    <option value="Mensal">Mensal</option>
-                    <option value="Trimestral">Trimestral</option>
-                    <option value="Anual">Anual</option>
-                  </select>
+                    <SelectTrigger className="bg-white/10 border-white/20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Único">Único</SelectItem>
+                      <SelectItem value="Mensal">Mensal</SelectItem>
+                      <SelectItem value="Trimestral">Trimestral</SelectItem>
+                      <SelectItem value="Anual">Anual</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+                
+                <StatusSelect 
+                  status={selectedPayment.status} 
+                  onChange={(status) => setSelectedPayment({...selectedPayment, status})}
+                />
               </div>
+              
               <div className="flex justify-between pt-4">
                 <Button
                   variant="destructive"
@@ -715,7 +936,9 @@ const Pagamentos = () => {
                           value: selectedPayment.value,
                           status: selectedPayment.status,
                           payment_method: selectedPayment.payment_method,
-                          recurrence: selectedPayment.recurrence
+                          recurrence: selectedPayment.recurrence,
+                          category_id: selectedPayment.category_id || null,
+                          client_id: selectedPayment.client_id || null
                         })
                         .eq('id', selectedPayment.id);
                       
@@ -728,7 +951,7 @@ const Pagamentos = () => {
                           .insert({
                             user_id: user.id,
                             description: `Pagamento: ${selectedPayment.description}`,
-                            category: 'Pagamentos',
+                            category: selectedPayment.category_id || 'Pagamentos',
                             value: selectedPayment.value,
                             type: 'expense',
                             date: new Date().toISOString(),
