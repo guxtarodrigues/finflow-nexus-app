@@ -8,15 +8,29 @@ import { CircleDollarSign, TrendingUp, FileText, Clock, Users, CreditCard } from
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { startOfMonth, endOfMonth, format, addMonths, isWithinInterval } from "date-fns";
+import { startOfMonth, endOfMonth, format, addMonths } from "date-fns";
 import { Client } from "@/types/clients";
+
+// Define specific type for financial data to avoid deep instantiation
+interface FinancialData {
+  totalBalance: number;
+  monthlyIncome: number;
+  monthlyExpense: number;
+  totalSavings: number;
+  yearlyForecast: number;
+  nextMonthForecast: number;
+  activeClients: number;
+  taxPayable: number;
+  upcomingPayments: Array<any>; // Using a more specific type here if possible
+  clientsIncome: number;
+}
 
 const Dashboard = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [financialData, setFinancialData] = useState({
+  const [financialData, setFinancialData] = useState<FinancialData>({
     totalBalance: 0,
     monthlyIncome: 0,
     monthlyExpense: 0,
