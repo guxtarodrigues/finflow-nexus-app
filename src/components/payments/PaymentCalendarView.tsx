@@ -1,7 +1,8 @@
 
 import { useState } from "react";
-import { format, parse } from "date-fns";
+import { format, parse, addMonths, isSameDay } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { Repeat } from "lucide-react";
 
 interface Payment {
   id: string;
@@ -9,6 +10,8 @@ interface Payment {
   description: string;
   value: number;
   status: string;
+  recurrence?: string;
+  recurrence_count?: number;
 }
 
 interface PaymentCalendarViewProps {
@@ -17,9 +20,74 @@ interface PaymentCalendarViewProps {
 }
 
 export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarViewProps) => {
+  // Helper function to generate future recurring payments
+  const generateFuturePayments = () => {
+    const allPayments: Payment[] = [...payments];
+    
+    // Process each payment to generate future instances based on recurrence
+    payments.forEach(payment => {
+      if (!payment.recurrence || payment.recurrence === 'Único') {
+        return; // Skip non-recurring payments
+      }
+      
+      try {
+        // Parse the payment due_date from dd/MM/yyyy format to a Date object
+        const originalDate = parse(payment.due_date, 'dd/MM/yyyy', new Date());
+        
+        // Define the number of months to add based on recurrence type
+        const getMonthsToAdd = (recurrence: string) => {
+          switch (recurrence) {
+            case 'Mensal': return 1;
+            case 'Trimestral': return 3;
+            case 'Anual': return 12;
+            default: return 0;
+          }
+        };
+        
+        // Define how many future instances to generate
+        const getFutureInstances = (recurrence: string) => {
+          switch (recurrence) {
+            case 'Mensal': return 24; // 2 years
+            case 'Trimestral': return 8; // 2 years
+            case 'Anual': return 2; // 2 years
+            default: return 0;
+          }
+        };
+        
+        const monthsToAdd = getMonthsToAdd(payment.recurrence);
+        const futureInstances = getFutureInstances(payment.recurrence);
+        
+        // Generate future instances
+        if (monthsToAdd > 0) {
+          for (let i = 1; i <= futureInstances; i++) {
+            const futureDate = addMonths(originalDate, monthsToAdd * i);
+            
+            // Add future payment instance
+            allPayments.push({
+              id: `${payment.id}-future-${i}`,
+              due_date: format(futureDate, 'dd/MM/yyyy'),
+              description: `${payment.description} (Recorrente)`,
+              value: payment.value,
+              status: 'pending',
+              recurrence: payment.recurrence,
+              recurrence_count: i
+            });
+          }
+        }
+      } catch (error) {
+        console.error(`Error generating future payments for: ${payment.description}`, error);
+      }
+    });
+    
+    return allPayments;
+  };
+
+  // Get all payments including future recurring ones
+  const allPayments = generateFuturePayments();
+
   // Helper function to get payments for a specific date
   const getPaymentsForDate = (date: Date) => {
-    return payments.filter(payment => {
+    return allPayments.filter(payment => {
       try {
         // Parse the payment due_date from dd/MM/yyyy format to a Date object
         const paymentDate = parse(payment.due_date, 'dd/MM/yyyy', new Date());
@@ -74,7 +142,7 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
         {Array.from({ length: daysInMonth }, (_, i) => {
           const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), i + 1);
           const dayPayments = getPaymentsForDate(date);
-          const isCurrentDate = date.toDateString() === new Date().toDateString();
+          const isCurrentDate = isSameDay(date, new Date());
           
           return (
             <div 
@@ -97,16 +165,21 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
                 {dayPayments.slice(0, 2).map((payment, index) => (
                   <div 
                     key={`payment-${payment.id}-${index}`}
-                    className={`text-xs p-1 rounded truncate ${
+                    className={`text-xs p-1 rounded truncate flex items-center ${
                       payment.status === 'completed' ? 'bg-fin-green/20 text-fin-green' :
                       payment.status === 'overdue' ? 'bg-fin-red/20 text-fin-red' :
                       'bg-[#2A2A2E]'
                     }`}
                   >
-                    {payment.description} • {payment.value.toLocaleString('pt-BR', { 
-                      style: 'currency', 
-                      currency: 'BRL' 
-                    })}
+                    {payment.recurrence_count && (
+                      <Repeat className="h-3 w-3 mr-1 flex-shrink-0" />
+                    )}
+                    <span className="truncate">
+                      {payment.description} • {payment.value.toLocaleString('pt-BR', { 
+                        style: 'currency', 
+                        currency: 'BRL' 
+                      })}
+                    </span>
                   </div>
                 ))}
                 {dayPayments.length > 2 && (
