@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { 
   ArrowLeftRight, 
@@ -148,7 +149,7 @@ const Movimentacoes = () => {
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
-        .eq('status', 'completed')  // Filter only completed transactions
+        .eq('status', 'completed')  // Apenas transações completadas são mostradas em Movimentações
         .gte('date', dateRange.from.toISOString())
         .lte('date', dateRange.to.toISOString())
         .order('date', { ascending: false });
