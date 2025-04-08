@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { format, parse, addMonths, isSameDay } from "date-fns";
 import { Badge } from "@/components/ui/badge";
-import { Repeat } from "lucide-react";
+import { Repeat, CheckCircle, Clock } from "lucide-react";
 
 interface Payment {
   id: string;
@@ -117,6 +117,18 @@ export const PaymentCalendarView = ({
     }
   };
 
+  // Função para determinar o ícone de status
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return <CheckCircle className="h-3 w-3 text-fin-green mr-1 flex-shrink-0" />;
+      case 'pending':
+        return <Clock className="h-3 w-3 text-yellow-500 mr-1 flex-shrink-0" />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="rounded-md border border-[#2A2A2E] p-4">
       <div className="mb-4 text-center">
@@ -168,6 +180,7 @@ export const PaymentCalendarView = ({
                       'bg-[#2A2A2E]'
                     }`}
                   >
+                    {getStatusIcon(payment.status)}
                     {payment.recurrence_count && (
                       <Repeat className="h-3 w-3 mr-1 flex-shrink-0" />
                     )}

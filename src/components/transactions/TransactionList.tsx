@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, Loader2, ArrowUp, ArrowDown, Check } from "lucide-react";
+import { Trash2, Loader2, ArrowUp, ArrowDown, Check, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -29,13 +29,15 @@ interface TransactionListProps {
   loading: boolean;
   onDeleteTransaction: (id: string) => void;
   onStatusChange?: () => void;
+  showStatusActions?: boolean;
 }
 
 export const TransactionList = ({ 
   transactions, 
   loading, 
   onDeleteTransaction,
-  onStatusChange 
+  onStatusChange,
+  showStatusActions = true
 }: TransactionListProps) => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -63,6 +65,37 @@ export const TransactionList = ({
       console.error('Error marking as received:', error);
       toast({
         title: "Erro ao confirmar recebimento",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleMarkAsPending = async (id: string) => {
+    try {
+      setProcessingId(id);
+      
+      const { error } = await supabase
+        .from('transactions')
+        .update({ status: 'pending' })
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      if (onStatusChange) {
+        onStatusChange();
+      }
+      
+      toast({
+        title: "Status atualizado",
+        description: "A transação foi marcada como pendente",
+      });
+    } catch (error: any) {
+      console.error('Error marking as pending:', error);
+      toast({
+        title: "Erro ao atualizar status",
         description: error.message,
         variant: "destructive"
       });
@@ -131,30 +164,52 @@ export const TransactionList = ({
                   })}
                 </TableCell>
                 <TableCell className="text-right">
-                  {transaction.type === "income" && transaction.status === "pending" ? (
-                    <Button 
-                      variant="receipt" 
-                      size="icon" 
-                      className="h-8 w-8"
-                      onClick={() => handleMarkAsReceived(transaction.id)}
-                      disabled={processingId === transaction.id}
-                    >
-                      {processingId === transaction.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Check className="h-4 w-4" />
-                      )}
-                    </Button>
-                  ) : (
+                  <div className="flex justify-end space-x-1">
+                    {showStatusActions && (
+                      <>
+                        {transaction.status === "pending" ? (
+                          <Button 
+                            variant="receipt" 
+                            size="icon" 
+                            className="h-8 w-8"
+                            onClick={() => handleMarkAsReceived(transaction.id)}
+                            disabled={processingId === transaction.id}
+                            title="Marcar como concluído"
+                          >
+                            {processingId === transaction.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Check className="h-4 w-4" />
+                            )}
+                          </Button>
+                        ) : (
+                          <Button 
+                            variant="outline" 
+                            size="icon" 
+                            className="h-8 w-8"
+                            onClick={() => handleMarkAsPending(transaction.id)}
+                            disabled={processingId === transaction.id}
+                            title="Marcar como pendente"
+                          >
+                            {processingId === transaction.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Clock className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
+                      </>
+                    )}
                     <Button 
                       variant="ghost" 
                       size="icon" 
                       className="h-8 w-8"
                       onClick={() => onDeleteTransaction(transaction.id)}
+                      title="Excluir transação"
                     >
                       <Trash2 className="h-4 w-4 text-muted-foreground" />
                     </Button>
-                  )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))

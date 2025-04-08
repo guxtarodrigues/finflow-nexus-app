@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { 
   ArrowLeftRight, 
@@ -148,7 +149,7 @@ const Movimentacoes = () => {
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
-        .eq('status', 'completed')
+        .eq('status', 'completed')  // IMPORTANTE: Aqui filtramos apenas por status 'completed'
         .gte('date', dateRange.from.toISOString())
         .lte('date', dateRange.to.toISOString())
         .order('date', { ascending: false });
@@ -223,7 +224,7 @@ const Movimentacoes = () => {
           type: newTransaction.type,
           value: Number(newTransaction.value),
           date: new Date(newTransaction.date).toISOString(),
-          status: 'completed',
+          status: 'completed', // Por padrão, já marcamos como 'completed'
           user_id: user.id
         });
 
@@ -314,7 +315,7 @@ const Movimentacoes = () => {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Movimentações</h1>
           <p className="text-muted-foreground">
-            Gerenciamento de receitas e despesas
+            Visualização de todas as receitas e despesas já efetivadas
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -475,7 +476,7 @@ const Movimentacoes = () => {
           <CardHeader className="pb-3">
             <CardTitle className="text-lg font-normal flex items-center">
               <ArrowLeftRight className="mr-2 h-5 w-5 text-fin-green" />
-              Todas as Movimentações
+              Todas as Movimentações Efetivadas
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -495,11 +496,11 @@ const Movimentacoes = () => {
                 <div className="flex flex-wrap gap-2 items-center">
                   <DateFilter 
                     dateRange={dateRange}
-                    dateFilterMode={dateFilterMode}
+                    onDateRangeChange={handleDateRangeChange}
                     onPrevMonth={handlePrevMonth}
                     onNextMonth={handleNextMonth}
                     onCurrentMonth={handleCurrentMonth}
-                    onDateRangeChange={handleDateRangeChange}
+                    dateFilterMode={dateFilterMode}
                     currentDate={currentDate}
                   />
                   
@@ -533,6 +534,8 @@ const Movimentacoes = () => {
                 transactions={filteredTransactions}
                 loading={loading}
                 onDeleteTransaction={handleDeleteTransaction}
+                onStatusChange={fetchTransactions}
+                showStatusActions={true}
               />
             </div>
           </CardContent>
