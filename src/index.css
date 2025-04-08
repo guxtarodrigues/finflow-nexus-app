@@ -40,11 +40,7 @@
   }
 
   body {
-    @apply bg-fin-background text-fin-text-primary antialiased min-h-screen;
-  }
-
-  .card-gradient {
-    @apply bg-gradient-to-b from-fin-card-from to-fin-card-to rounded-2xl border border-white/5 shadow-lg;
+    @apply bg-[#101014] text-white antialiased min-h-screen;
   }
 
   .fin-section {
@@ -52,7 +48,7 @@
   }
 
   .fin-card {
-    @apply card-gradient p-4 h-full;
+    @apply bg-[#1A1A1E] rounded-3xl p-6 shadow-md;
   }
 
   .fin-card-header {
@@ -60,19 +56,19 @@
   }
 
   .fin-card-title {
-    @apply text-lg font-semibold text-fin-text-primary;
+    @apply text-lg text-gray-300 font-normal;
   }
 
   .fin-card-subtitle {
-    @apply text-sm text-fin-text-secondary;
+    @apply text-sm text-gray-400;
   }
 
   .fin-value {
-    @apply text-2xl font-bold;
+    @apply text-4xl font-bold text-white mb-3;
   }
 
   .fin-icon-wrapper {
-    @apply w-10 h-10 flex items-center justify-center rounded-full;
+    @apply h-14 w-14 rounded-full flex items-center justify-center;
   }
 
   .fin-green-icon {

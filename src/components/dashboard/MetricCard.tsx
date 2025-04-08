@@ -1,6 +1,6 @@
 
 import { ReactNode } from "react";
-import { ArrowDown, ArrowUp, CircleDollarSign } from "lucide-react";
+import { ArrowDown, ArrowUp, CircleDollarSign, PiggyBank } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MetricCardProps {
@@ -16,26 +16,26 @@ export const MetricCard = ({ title, value, subtitle, trend = "neutral", icon = "
     switch (icon) {
       case "money":
         return (
-          <div className="fin-icon-wrapper fin-dollar-icon">
-            <CircleDollarSign size={20} />
+          <div className="h-14 w-14 rounded-full bg-fin-green/20 flex items-center justify-center">
+            <PiggyBank className="h-7 w-7 text-fin-green" />
           </div>
         );
       case "income":
         return (
-          <div className="fin-icon-wrapper fin-green-icon">
-            <ArrowUp size={20} />
+          <div className="h-14 w-14 rounded-full bg-fin-green/20 flex items-center justify-center">
+            <ArrowUp className="h-7 w-7 text-fin-green" />
           </div>
         );
       case "expense":
         return (
-          <div className="fin-icon-wrapper fin-red-icon">
-            <ArrowDown size={20} />
+          <div className="h-14 w-14 rounded-full bg-fin-red/20 flex items-center justify-center">
+            <ArrowDown className="h-7 w-7 text-fin-red" />
           </div>
         );
       case "savings":
         return (
-          <div className="fin-icon-wrapper fin-green-icon">
-            <CircleDollarSign size={20} />
+          <div className="h-14 w-14 rounded-full bg-fin-green/20 flex items-center justify-center">
+            <CircleDollarSign className="h-7 w-7 text-fin-green" />
           </div>
         );
       default:
@@ -44,15 +44,13 @@ export const MetricCard = ({ title, value, subtitle, trend = "neutral", icon = "
   };
 
   return (
-    <div className="fin-card">
-      <div className="fin-card-header">
-        <div>
-          <h3 className="fin-card-title">{title}</h3>
-        </div>
+    <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg text-gray-300 font-normal">{title}</h3>
         {renderIcon()}
       </div>
-      <div className="fin-value">{value}</div>
-      <div className="mt-2 flex items-center text-sm">
+      <div className="text-4xl font-bold text-white mb-3">{value}</div>
+      <div className="flex items-center text-sm">
         {trend === "up" && (
           <ArrowUp size={14} className="text-fin-green mr-1" />
         )}
@@ -61,7 +59,7 @@ export const MetricCard = ({ title, value, subtitle, trend = "neutral", icon = "
         )}
         <span
           className={cn(
-            "text-fin-text-secondary",
+            "text-gray-400",
             trend === "up" && "text-fin-green",
             trend === "down" && "text-fin-red"
           )}
