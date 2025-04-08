@@ -221,7 +221,10 @@ export type Database = {
           created_at: string
           date: string
           description: string
+          due_date: string | null
           id: string
+          payment_method: string | null
+          recipient: string | null
           recurrence: string | null
           recurrence_count: number | null
           status: string
@@ -237,7 +240,10 @@ export type Database = {
           created_at?: string
           date?: string
           description: string
+          due_date?: string | null
           id?: string
+          payment_method?: string | null
+          recipient?: string | null
           recurrence?: string | null
           recurrence_count?: number | null
           status?: string
@@ -253,7 +259,10 @@ export type Database = {
           created_at?: string
           date?: string
           description?: string
+          due_date?: string | null
           id?: string
+          payment_method?: string | null
+          recipient?: string | null
           recurrence?: string | null
           recurrence_count?: number | null
           status?: string

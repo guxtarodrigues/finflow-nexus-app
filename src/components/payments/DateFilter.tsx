@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { DateRange } from "react-day-picker";
 
 interface DateFilterProps {
   dateRange: {
