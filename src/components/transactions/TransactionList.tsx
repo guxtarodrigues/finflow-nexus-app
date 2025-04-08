@@ -42,13 +42,13 @@ export const TransactionList = ({
   const [processingId, setProcessingId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const handleMarkAsComplete = async (id: string) => {
+  const updateTransactionStatus = async (id: string, status: string) => {
     try {
       setProcessingId(id);
       
       const { error } = await supabase
         .from('transactions')
-        .update({ status: 'completed' })
+        .update({ status })
         .eq('id', id);
 
       if (error) throw error;
@@ -60,10 +60,10 @@ export const TransactionList = ({
       
       toast({
         title: "Status atualizado",
-        description: "A transação foi marcada como concluída com sucesso",
+        description: `A transação foi marcada como ${status === 'completed' ? 'concluída' : status === 'pending' ? 'pendente' : 'atrasada'} com sucesso`,
       });
     } catch (error: any) {
-      console.error('Error marking as completed:', error);
+      console.error(`Error updating status to ${status}:`, error);
       toast({
         title: "Erro ao atualizar status",
         description: error.message,
@@ -74,69 +74,9 @@ export const TransactionList = ({
     }
   };
 
-  const handleMarkAsPending = async (id: string) => {
-    try {
-      setProcessingId(id);
-      
-      const { error } = await supabase
-        .from('transactions')
-        .update({ status: 'pending' })
-        .eq('id', id);
-
-      if (error) throw error;
-      
-      // Ensure parent component is notified of the status change
-      if (onStatusChange) {
-        onStatusChange();
-      }
-      
-      toast({
-        title: "Status atualizado",
-        description: "A transação foi marcada como pendente",
-      });
-    } catch (error: any) {
-      console.error('Error marking as pending:', error);
-      toast({
-        title: "Erro ao atualizar status",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleMarkAsOverdue = async (id: string) => {
-    try {
-      setProcessingId(id);
-      
-      const { error } = await supabase
-        .from('transactions')
-        .update({ status: 'overdue' })
-        .eq('id', id);
-
-      if (error) throw error;
-      
-      // Ensure parent component is notified of the status change
-      if (onStatusChange) {
-        onStatusChange();
-      }
-      
-      toast({
-        title: "Status atualizado",
-        description: "A transação foi marcada como atrasada",
-      });
-    } catch (error: any) {
-      console.error('Error marking as overdue:', error);
-      toast({
-        title: "Erro ao atualizar status",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      setProcessingId(null);
-    }
-  };
+  const handleMarkAsComplete = (id: string) => updateTransactionStatus(id, 'completed');
+  const handleMarkAsPending = (id: string) => updateTransactionStatus(id, 'pending');
+  const handleMarkAsOverdue = (id: string) => updateTransactionStatus(id, 'overdue');
 
   const getStatusBadge = (status: string) => {
     switch (status) {
