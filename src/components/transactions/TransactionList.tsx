@@ -53,6 +53,7 @@ export const TransactionList = ({
 
       if (error) throw error;
       
+      // Ensure parent component is notified of the status change
       if (onStatusChange) {
         onStatusChange();
       }
@@ -84,6 +85,7 @@ export const TransactionList = ({
 
       if (error) throw error;
       
+      // Ensure parent component is notified of the status change
       if (onStatusChange) {
         onStatusChange();
       }
@@ -115,6 +117,7 @@ export const TransactionList = ({
 
       if (error) throw error;
       
+      // Ensure parent component is notified of the status change
       if (onStatusChange) {
         onStatusChange();
       }

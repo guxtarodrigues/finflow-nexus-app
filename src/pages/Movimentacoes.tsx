@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   ArrowLeftRight, 
@@ -149,7 +148,7 @@ const Movimentacoes = () => {
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
-        .eq('status', 'completed')  // IMPORTANTE: Aqui filtramos apenas por status 'completed'
+        .eq('status', 'completed')  // Filter only completed transactions
         .gte('date', dateRange.from.toISOString())
         .lte('date', dateRange.to.toISOString())
         .order('date', { ascending: false });
@@ -278,6 +277,10 @@ const Movimentacoes = () => {
         variant: "destructive"
       });
     }
+  };
+
+  const handleStatusChange = () => {
+    fetchTransactions();
   };
 
   const handlePrevMonth = () => {
@@ -534,7 +537,7 @@ const Movimentacoes = () => {
                 transactions={filteredTransactions}
                 loading={loading}
                 onDeleteTransaction={handleDeleteTransaction}
-                onStatusChange={fetchTransactions}
+                onStatusChange={handleStatusChange}
                 showStatusActions={true}
               />
             </div>
