@@ -10,7 +10,9 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, Loader2, ArrowUp, ArrowDown } from "lucide-react";
+import { Trash2, Loader2, ArrowUp, ArrowDown, Check } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Transaction {
   id: string;
@@ -26,13 +28,49 @@ interface TransactionListProps {
   transactions: Transaction[];
   loading: boolean;
   onDeleteTransaction: (id: string) => void;
+  onStatusChange?: () => void;
 }
 
 export const TransactionList = ({ 
   transactions, 
   loading, 
-  onDeleteTransaction 
+  onDeleteTransaction,
+  onStatusChange 
 }: TransactionListProps) => {
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const handleMarkAsReceived = async (id: string) => {
+    try {
+      setProcessingId(id);
+      
+      const { error } = await supabase
+        .from('transactions')
+        .update({ status: 'completed' })
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      if (onStatusChange) {
+        onStatusChange();
+      }
+      
+      toast({
+        title: "Recebimento confirmado",
+        description: "O recebimento foi marcado como recebido com sucesso",
+      });
+    } catch (error: any) {
+      console.error('Error marking as received:', error);
+      toast({
+        title: "Erro ao confirmar recebimento",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   return (
     <div className="rounded-md border border-[#2A2A2E]">
       <Table>
@@ -93,14 +131,30 @@ export const TransactionList = ({
                   })}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8"
-                    onClick={() => onDeleteTransaction(transaction.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                  </Button>
+                  {transaction.type === "income" && transaction.status === "pending" ? (
+                    <Button 
+                      variant="receipt" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => handleMarkAsReceived(transaction.id)}
+                      disabled={processingId === transaction.id}
+                    >
+                      {processingId === transaction.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                    </Button>
+                  ) : (
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => onDeleteTransaction(transaction.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))

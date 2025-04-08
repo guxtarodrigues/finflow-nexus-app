@@ -9,8 +9,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { MarkAsReceivedButton } from "@/components/clients/MarkAsReceivedButton";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Check } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +32,7 @@ interface ClientTransactionsListProps {
 export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchTransactions = async () => {
@@ -75,6 +76,35 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
   useEffect(() => {
     fetchTransactions();
   }, [clientId]);
+
+  const handleMarkAsReceived = async (id: string) => {
+    try {
+      setProcessingId(id);
+      
+      const { error } = await supabase
+        .from('transactions')
+        .update({ status: 'completed' })
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      toast({
+        title: "Recebimento confirmado",
+        description: "O recebimento foi marcado como recebido com sucesso",
+      });
+      
+      fetchTransactions();
+    } catch (error: any) {
+      console.error('Error marking as received:', error);
+      toast({
+        title: "Erro ao confirmar recebimento",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
@@ -150,10 +180,19 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
                 </TableCell>
                 <TableCell className="text-right">
                   {transaction.status === 'pending' && (
-                    <MarkAsReceivedButton 
-                      transactionId={transaction.id}
-                      onStatusChange={fetchTransactions}
-                    />
+                    <Button 
+                      variant="receipt" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => handleMarkAsReceived(transaction.id)}
+                      disabled={processingId === transaction.id}
+                    >
+                      {processingId === transaction.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                    </Button>
                   )}
                 </TableCell>
               </TableRow>
