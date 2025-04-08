@@ -233,5 +233,11 @@ const Pagamentos = () => {
     }
   };
 
-  // ... rest of code remains unchanged
+  return (
+    <div>
+      {/* Component content */}
+    </div>
+  );
 };
+
+export default Pagamentos;
