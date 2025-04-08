@@ -87,14 +87,17 @@ const Dashboard = () => {
       
       if (paymentsError) throw paymentsError;
       
-      // Fetch active clients
-      const { data: clients, error: clientsError } = await supabase
+      // Fetch active clients - Fix for type instantiation issue
+      const { data: clientsData, error: clientsError } = await supabase
         .from('clients')
         .select('*')
-        .eq('user_id', user?.id)
-        .eq('status', 'active');
+        .eq('user_id', user?.id);
       
       if (clientsError) throw clientsError;
+      
+      // Type casting to ensure proper type handling
+      const clients = clientsData as Client[] || [];
+      const activeClients = clients.filter(client => client.status === 'active');
       
       // Calculate financial metrics
       const currentMonthTransactions = transactions?.filter(tx => {
@@ -118,9 +121,8 @@ const Dashboard = () => {
       
       // Calculate clients income (recurring payments)
       const currentDate = new Date();
-      const clientsData = clients as Client[] || [];
       
-      const monthlyClientIncome = clientsData
+      const monthlyClientIncome = activeClients
         .filter(client => 
           client.recurring_payment && 
           client.monthly_value && 
@@ -134,11 +136,10 @@ const Dashboard = () => {
       const yearlyForecast = yearlyTransactionsForecast + yearlyClientsIncome;
       
       // Calculate next month forecast
-      const nextMonthClientsIncome = clientsData
+      const nextMonthClientsIncome = activeClients
         .filter(client => {
           // Include if client is active, has recurring payment, and contract covers next month
           return client.recurring_payment && 
-                 client.status === 'active' && 
                  client.monthly_value && 
                  (!client.contract_end || new Date(client.contract_end) >= nextMonthEnd);
         })
@@ -152,6 +153,7 @@ const Dashboard = () => {
       // Total balance includes client income
       const totalBalance = totalIncome - totalExpense + monthlyClientIncome;
       
+      // Update financial data state with properly typed data
       setFinancialData({
         totalBalance,
         monthlyIncome: currentMonthIncome + monthlyClientIncome,
@@ -159,9 +161,9 @@ const Dashboard = () => {
         totalSavings: totalBalance * 0.2, // Assuming 20% of net income is saved
         yearlyForecast,
         nextMonthForecast,
-        activeClients: clientsData.filter(client => client.status === 'active').length,
+        activeClients: activeClients.length,
         taxPayable,
-        upcomingPayments: upcomingPayments || [],
+        upcomingPayments: upcomingPayments as Payment[] || [],
         clientsIncome: monthlyClientIncome
       });
     } catch (error: any) {
