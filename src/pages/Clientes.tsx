@@ -12,7 +12,8 @@ import {
   XCircle,
   CheckCircle,
   ArrowUp,
-  Clock
+  Clock,
+  Trash2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,16 @@ import {
   DialogTitle,
   DialogClose 
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   Sheet, 
   SheetContent, 
@@ -88,6 +99,7 @@ const Clientes = () => {
   
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [endDateOpen, setEndDateOpen] = useState(false);
+  const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   
   useEffect(() => {
     if (user) {
@@ -255,6 +267,8 @@ const Clientes = () => {
       });
       
       fetchClients();
+      setIsEditSheetOpen(false);
+      setIsDeleteAlertOpen(false);
     } catch (error: any) {
       console.error('Error deleting client:', error);
       toast({
@@ -885,13 +899,25 @@ const Clientes = () => {
                     />
                   </div>
                   
-                  <div className="flex justify-end gap-2 pt-4">
-                    <Button variant="outline" onClick={() => setIsEditSheetOpen(false)}>
-                      Cancelar
+                  <div className="flex justify-between gap-2 pt-4">
+                    <Button 
+                      variant="destructive" 
+                      size="sm" 
+                      onClick={() => setIsDeleteAlertOpen(true)}
+                      className="flex items-center"
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Excluir
                     </Button>
-                    <Button className="bg-fin-green text-black hover:bg-fin-green/90" onClick={handleUpdateClient}>
-                      Salvar alterações
-                    </Button>
+                    
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setIsEditSheetOpen(false)}>
+                        Cancelar
+                      </Button>
+                      <Button className="bg-fin-green text-black hover:bg-fin-green/90" onClick={handleUpdateClient}>
+                        Salvar alterações
+                      </Button>
+                    </div>
                   </div>
                 </TabsContent>
                 <TabsContent value="transactions" className="mt-4">
@@ -905,6 +931,26 @@ const Clientes = () => {
           )}
         </SheetContent>
       </Sheet>
+      
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Cliente</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este cliente? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive text-destructive-foreground"
+              onClick={() => selectedClient && handleDeleteClient(selectedClient.id)}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
