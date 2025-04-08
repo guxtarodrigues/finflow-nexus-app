@@ -9,7 +9,8 @@ import {
   CircleDollarSign, 
   CheckCircle, 
   XCircle,
-  Loader2
+  Loader2,
+  Clock
 } from "lucide-react";
 import { 
   Card, 
@@ -55,6 +56,14 @@ export const ClientCard = ({ client, onEdit, onDelete, onStatusChange }: ClientC
     return null;
   };
 
+  const getPaymentStatusBadge = () => {
+    if (client.payment_status === 'paid') {
+      return <Badge variant="outline" className="ml-2 bg-green-500/10 text-green-500 text-[10px]">Pago</Badge>;
+    } else {
+      return <Badge variant="outline" className="ml-2 bg-amber-500/10 text-amber-500 text-[10px]">Pendente</Badge>;
+    }
+  };
+
   const handleMarkAsReceived = async () => {
     if (!client.monthly_value) {
       toast({
@@ -69,7 +78,7 @@ export const ClientCard = ({ client, onEdit, onDelete, onStatusChange }: ClientC
       setProcessingId(client.id);
       
       // Create a transaction record for the received payment
-      const { error } = await supabase
+      const { error: transactionError } = await supabase
         .from('transactions')
         .insert({
           type: 'income',
@@ -82,7 +91,18 @@ export const ClientCard = ({ client, onEdit, onDelete, onStatusChange }: ClientC
           user_id: client.user_id
         });
 
-      if (error) throw error;
+      if (transactionError) throw transactionError;
+      
+      // Update client payment status
+      const { error: clientError } = await supabase
+        .from('clients')
+        .update({
+          payment_status: 'paid',
+          last_payment_date: new Date().toISOString()
+        })
+        .eq('id', client.id);
+        
+      if (clientError) throw clientError;
       
       toast({
         title: "Pagamento registrado",
@@ -149,6 +169,7 @@ export const ClientCard = ({ client, onEdit, onDelete, onStatusChange }: ClientC
             <span className="font-medium">
               {formatCurrency(client.monthly_value)}
               {client.recurring_payment && <Badge variant="outline" className="ml-2 bg-fin-green/10 text-fin-green text-[10px]">Recorrente</Badge>}
+              {client.monthly_value && getPaymentStatusBadge()}
             </span>
           </div>
           
@@ -170,7 +191,7 @@ export const ClientCard = ({ client, onEdit, onDelete, onStatusChange }: ClientC
           Editar
         </Button>
         
-        {client.status === 'active' && client.monthly_value && (
+        {client.status === 'active' && client.monthly_value && client.payment_status !== 'paid' && (
           <Button 
             variant="receipt" 
             size="icon"
@@ -184,6 +205,13 @@ export const ClientCard = ({ client, onEdit, onDelete, onStatusChange }: ClientC
               <CircleDollarSign className="h-4 w-4" />
             )}
           </Button>
+        )}
+        
+        {client.status === 'active' && client.monthly_value && client.payment_status === 'paid' && (
+          <div className="flex items-center text-xs text-green-500">
+            <CheckCircle className="h-4 w-4 mr-1" />
+            Pago
+          </div>
         )}
       </CardFooter>
     </Card>

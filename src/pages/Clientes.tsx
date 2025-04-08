@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   Users, 
@@ -82,7 +81,8 @@ const Clientes = () => {
     monthly_value: 0,
     status: "active",
     recurring_payment: false,
-    description: ""
+    description: "",
+    payment_status: "pending"
   });
   
   const [startDateOpen, setStartDateOpen] = useState(false);
@@ -167,10 +167,10 @@ const Clientes = () => {
       
       const clientData: NewClient = {
         ...newClient,
-        user_id: user.id
+        user_id: user.id,
+        payment_status: 'pending'
       };
       
-      // Step 1: Insert the client data
       const { data: clientResult, error: clientError } = await supabase
         .from('clients')
         .insert(clientData)
@@ -179,7 +179,6 @@ const Clientes = () => {
       
       if (clientError) throw clientError;
       
-      // Step 2: If client has recurring payment and monthly value, create a transaction
       if (newClient.recurring_payment && newClient.monthly_value && newClient.monthly_value > 0) {
         const currentDate = new Date();
         const transactionData = {
@@ -218,7 +217,8 @@ const Clientes = () => {
         monthly_value: 0,
         status: "active",
         recurring_payment: false,
-        description: ""
+        description: "",
+        payment_status: "pending"
       });
       
       setIsDialogOpen(false);
@@ -278,7 +278,8 @@ const Clientes = () => {
           monthly_value: selectedClient.monthly_value,
           status: selectedClient.status,
           recurring_payment: selectedClient.recurring_payment,
-          description: selectedClient.description
+          description: selectedClient.description,
+          payment_status: selectedClient.payment_status
         })
         .eq('id', selectedClient.id);
       
@@ -334,7 +335,6 @@ const Clientes = () => {
   
   const filteredClients = getFilteredClients();
   
-  // Calculate metrics
   const monthlyRevenue = clients
     .filter(client => client.status === 'active')
     .reduce((sum, client) => sum + (client.monthly_value || 0), 0);
@@ -366,7 +366,6 @@ const Clientes = () => {
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Monthly Revenue */}
         <MetricCard
           title="Receita Mensal"
           value={formatCurrency(monthlyRevenue)}
@@ -374,7 +373,6 @@ const Clientes = () => {
           icon="income"
         />
         
-        {/* Yearly Revenue */}
         <MetricCard
           title="Receita Anual"
           value={formatCurrency(yearlyRevenue)}
@@ -382,7 +380,6 @@ const Clientes = () => {
           icon="savings"
         />
         
-        {/* Active Clients */}
         <MetricCard
           title="Clientes Ativos"
           value={activeClientsCount.toString()}
@@ -846,13 +843,33 @@ const Clientes = () => {
                     </div>
                   </div>
                   
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="edit-recurring_payment"
-                      checked={selectedClient.recurring_payment}
-                      onCheckedChange={(checked) => setSelectedClient({...selectedClient, recurring_payment: checked})}
-                    />
-                    <Label htmlFor="edit-recurring_payment">Pagamento Recorrente</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="edit-recurring_payment"
+                        checked={selectedClient.recurring_payment}
+                        onCheckedChange={(checked) => setSelectedClient({...selectedClient, recurring_payment: checked})}
+                      />
+                      <Label htmlFor="edit-recurring_payment">Pagamento Recorrente</Label>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-payment_status">Status de Pagamento</Label>
+                      <Select
+                        value={selectedClient.payment_status || "pending"}
+                        onValueChange={(value: 'pending' | 'paid') => 
+                          setSelectedClient({...selectedClient, payment_status: value})
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Status de pagamento" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">Pendente</SelectItem>
+                          <SelectItem value="paid">Pago</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   
                   <div className="space-y-2">
