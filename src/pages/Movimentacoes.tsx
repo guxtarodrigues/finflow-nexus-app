@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   ArrowLeftRight, 
@@ -32,10 +31,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 
-// Define the Transaction type
+// Define the Transaction type based on the database schema
 interface Transaction {
   id: string;
   date: string;
@@ -100,7 +99,7 @@ const Movimentacoes = () => {
       }
       
       // Format the transactions data
-      const formattedTransactions = data.map((item: any) => ({
+      const formattedTransactions = data.map((item) => ({
         id: item.id,
         date: format(new Date(item.date), 'dd/MM/yyyy'),
         description: item.description,
@@ -136,19 +135,18 @@ const Movimentacoes = () => {
         return;
       }
 
+      // Insert single object (not an array) and format data correctly
       const { error } = await supabase
         .from('transactions')
-        .insert([
-          {
-            description: newTransaction.description,
-            category: newTransaction.category,
-            type: newTransaction.type,
-            value: Number(newTransaction.value),
-            date: new Date(),
-            status: 'completed',
-            user_id: user.id
-          }
-        ]);
+        .insert({
+          description: newTransaction.description,
+          category: newTransaction.category,
+          type: newTransaction.type,
+          value: Number(newTransaction.value),
+          date: new Date().toISOString(),
+          status: 'completed',
+          user_id: user.id
+        });
 
       if (error) throw error;
       

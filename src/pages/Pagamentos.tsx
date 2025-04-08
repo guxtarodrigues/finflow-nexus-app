@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   CreditCard, 
@@ -39,7 +38,6 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 
-// Define the Payment type
 interface Payment {
   id: string;
   due_date: string;
@@ -84,7 +82,6 @@ const Pagamentos = () => {
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const { user } = useAuth();
   
-  // New payment form state
   const [newPayment, setNewPayment] = useState({
     description: "",
     recipient: "",
@@ -109,14 +106,12 @@ const Pagamentos = () => {
       
       setLoading(true);
       
-      // Start building the query
       let query = supabase
         .from('payments')
         .select('*')
         .eq('user_id', user.id)
         .order('due_date', { ascending: true });
       
-      // Apply filter if set
       if (filterStatus) {
         query = query.eq('status', filterStatus);
       }
@@ -130,8 +125,7 @@ const Pagamentos = () => {
         return;
       }
       
-      // Format the payments data
-      const formattedPayments = data.map((item: any) => ({
+      const formattedPayments = data.map((item) => ({
         id: item.id,
         due_date: format(new Date(item.due_date), 'dd/MM/yyyy'),
         description: item.description,
@@ -170,22 +164,19 @@ const Pagamentos = () => {
 
       const { error } = await supabase
         .from('payments')
-        .insert([
-          {
-            description: newPayment.description,
-            recipient: newPayment.recipient,
-            value: Number(newPayment.value),
-            due_date: new Date(newPayment.due_date),
-            payment_method: newPayment.payment_method,
-            recurrence: newPayment.recurrence,
-            status: newPayment.status,
-            user_id: user.id
-          }
-        ]);
+        .insert({
+          description: newPayment.description,
+          recipient: newPayment.recipient,
+          value: Number(newPayment.value),
+          due_date: new Date(newPayment.due_date).toISOString(),
+          payment_method: newPayment.payment_method,
+          recurrence: newPayment.recurrence,
+          status: newPayment.status,
+          user_id: user.id
+        });
 
       if (error) throw error;
       
-      // Reset form and close dialog
       setNewPayment({
         description: "",
         recipient: "",
@@ -197,7 +188,6 @@ const Pagamentos = () => {
       });
       setIsDialogOpen(false);
       
-      // Refresh payment list
       await fetchPayments();
       
       toast({
@@ -223,7 +213,6 @@ const Pagamentos = () => {
 
       if (error) throw error;
       
-      // Refresh payment list
       await fetchPayments();
       
       toast({
@@ -240,12 +229,11 @@ const Pagamentos = () => {
     }
   };
 
-  // Filter payments based on search term
   const filteredPayments = payments.filter(payment => 
     payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
     payment.recipient.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
