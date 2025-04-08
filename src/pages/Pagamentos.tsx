@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { 
   CreditCard, 
@@ -933,4 +934,219 @@ const Pagamentos = () => {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">
               <div className="flex items-center">
-                <div className="mr-2
+                <div className="mr-2 p-2 bg-fin-green/10 rounded">
+                  <Check className="h-4 w-4 text-fin-green" />
+                </div>
+                Pagamentos Realizados
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalPaid)}</div>
+            <p className="text-xs text-muted-foreground">
+              {payments.filter(p => p.status === 'completed').length} pagamentos realizados
+            </p>
+            <div className="mt-4">
+              <span className="text-xs font-medium inline-flex items-center">
+                <DollarSign className="h-3 w-3 mr-1" /> {formatCurrency(dashboardData.totalPending + dashboardData.totalPaid)} total em pagamentos
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">
+              <div className="flex items-center">
+                <div className="mr-2 p-2 bg-blue-500/10 rounded">
+                  <Repeat className="h-4 w-4 text-blue-500" />
+                </div>
+                Pagamentos Recorrentes
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(dashboardData.monthlyRecurringAmount)}</div>
+            <p className="text-xs text-muted-foreground">
+              {dashboardData.totalRecurring} pagamentos recorrentes
+            </p>
+            <div className="mt-4">
+              <span className="text-xs font-medium inline-flex items-center">
+                <RefreshCw className="h-3 w-3 mr-1" /> Pagamentos que se repetem mensalmente
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <DateFilter 
+            dateRange={dateRange}
+            dateFilterMode={dateFilterMode}
+            onPrevMonth={() => setDateFilterMode("prev")}
+            onNextMonth={() => setDateFilterMode("next")}
+            onCurrentMonth={() => setDateFilterMode("current")}
+            onDateRangeChange={(range) => {
+              setDateRange(range);
+              setDateFilterMode("custom");
+            }}
+          />
+          
+          <div className="flex flex-wrap gap-2 w-full md:w-auto">
+            <div className="relative w-full md:w-auto">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar pagamentos..."
+                className="pl-8 w-full md:w-auto bg-[#1F1F23] border-[#2A2A2E]"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="bg-[#1F1F23] border-[#2A2A2E]">
+                  <Filter className="mr-2 h-4 w-4" />
+                  Filtrar
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => setFilterStatus(null)}>
+                  Todos
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setFilterStatus("pending")}>
+                  Pendentes
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setFilterStatus("completed")}>
+                  Pagos
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setFilterStatus("overdue")}>
+                  Atrasados
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            
+            <div className="flex border rounded-md overflow-hidden">
+              <Button
+                variant="ghost"
+                className={`px-3 rounded-none ${viewMode === "list" ? "bg-[#2A2A2E]" : ""}`}
+                onClick={() => setViewMode("list")}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                className={`px-3 rounded-none ${viewMode === "calendar" ? "bg-[#2A2A2E]" : ""}`}
+                onClick={() => setViewMode("calendar")}
+              >
+                <Calendar className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      
+        {viewMode === "list" ? (
+          <div className="rounded-lg overflow-hidden">
+            <Table className="border border-[#2A2A2E] bg-[#1A1A1E]">
+              <TableHeader className="bg-[#1F1F23]">
+                <TableRow className="border-[#2A2A2E] hover:bg-[#2A2A2E]">
+                  <TableHead className="w-[100px]">Data</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead>Destinatário</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Recorrência</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-24 text-center">
+                      <div className="flex items-center justify-center">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <span>Carregando pagamentos...</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : payments.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-24 text-center">
+                      <p className="text-muted-foreground">Nenhum pagamento encontrado.</p>
+                      <Button 
+                        variant="link" 
+                        className="mt-2"
+                        onClick={() => setIsDialogOpen(true)}
+                      >
+                        Adicionar pagamento
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  payments
+                    .filter(payment => 
+                      payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      payment.recipient.toLowerCase().includes(searchTerm.toLowerCase())
+                    )
+                    .map((payment) => (
+                      <TableRow key={payment.id} className="border-[#2A2A2E] hover:bg-[#2A2A2E]">
+                        <TableCell className="font-medium">{payment.due_date}</TableCell>
+                        <TableCell>{payment.description}</TableCell>
+                        <TableCell>{payment.recipient}</TableCell>
+                        <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                        <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatCurrency(payment.value)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            {payment.status !== 'completed' && (
+                              <Button 
+                                size="icon"
+                                variant="outline"
+                                className="h-8 w-8 bg-fin-green/10 border-0 hover:bg-fin-green/20"
+                                onClick={() => handleMarkAsPaid(payment.id)}
+                              >
+                                <CheckCircle className="h-4 w-4 text-fin-green" />
+                              </Button>
+                            )}
+                            <Button 
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 bg-blue-500/10 border-0 hover:bg-blue-500/20"
+                            >
+                              <Edit className="h-4 w-4 text-blue-500" />
+                            </Button>
+                            <Button 
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 bg-fin-red/10 border-0 hover:bg-fin-red/20"
+                            >
+                              <Trash2 className="h-4 w-4 text-fin-red" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <PaymentCalendarView 
+            payments={payments} 
+            onPaymentClick={(payment) => {
+              setSelectedPayment(payment);
+              setIsUpdateSheetOpen(true);
+            }}
+            currentMonth={currentDate}
+            onMonthChange={setCurrentDate}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Pagamentos;
