@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DateRange } from "react-day-picker";
 
 interface DateFilterProps {
   dateRange: {
@@ -15,7 +16,7 @@ interface DateFilterProps {
   onNextMonth: () => void;
   onCurrentMonth: () => void;
   onDateRangeChange: (range: { from: Date; to: Date }) => void;
-  currentDate: Date; // This is the current view date that will be used for display
+  currentDate: Date; // Added to access the current view date
 }
 
 export const DateFilter = ({
@@ -25,10 +26,10 @@ export const DateFilter = ({
   onNextMonth,
   onCurrentMonth,
   onDateRangeChange,
-  currentDate
+  currentDate // Use the current view date
 }: DateFilterProps) => {
   
-  // Format date range for display (without locale for now to avoid import issues)
+  // Format date range for display
   const formatDateRange = () => {
     if (dateFilterMode === "current" || dateFilterMode === "prev" || dateFilterMode === "next") {
       // Use currentDate for displaying the month name in the selector

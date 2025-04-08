@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { 
   Table,
@@ -9,7 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Check, RefreshCcw, Clock, AlertTriangle } from "lucide-react";
+import { Loader2, Check, RefreshCcw } from "lucide-react";
 import { format, addMonths, parseISO, isAfter, isBefore } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -52,9 +53,11 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
       if (error) throw error;
       
       if (originalTransactions) {
+        // First, process the original transactions
         const processedTransactions: Transaction[] = [];
         
         originalTransactions.forEach(transaction => {
+          // Add the original transaction with explicitly defined types
           processedTransactions.push({
             id: transaction.id,
             date: format(new Date(transaction.date), 'dd/MM/yyyy'),
@@ -67,6 +70,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             recurrence_count: transaction.recurrence_count
           });
           
+          // If it's a recurring transaction, add future occurrences
           if (transaction.recurrence && transaction.recurrence !== 'once') {
             const getMonthsToAdd = (recurrenceType: string) => {
               switch (recurrenceType) {
@@ -94,6 +98,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             const occurrences = getOccurrences(transaction.recurrence);
             const originalDate = new Date(transaction.date);
             
+            // Add future occurrences regardless of current date
             if (monthsToAdd > 0) {
               for (let i = 1; i <= occurrences; i++) {
                 const futureDate = addMonths(originalDate, monthsToAdd * i);
@@ -114,6 +119,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
           }
         });
         
+        // Check for contract-based recurring income
         const { data: clientData, error: clientError } = await supabase
           .from('clients')
           .select('*')
@@ -125,21 +131,27 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             clientData.status === 'active' && 
             clientData.contract_start) {
           
+          // Add monthly contract payments
           const contractStartDate = new Date(clientData.contract_start);
           const contractEndDate = clientData.contract_end ? new Date(clientData.contract_end) : addMonths(new Date(), 24); // Default to 2 years if no end date
           
           let currentDate = new Date(contractStartDate);
           let paymentCount = 0;
           
+          // Generate monthly payments from contract start until contract end or 24 months
           while (currentDate <= contractEndDate && paymentCount < 24) {
+            // Skip if it's before the contract start
             if (currentDate >= contractStartDate) {
               const paymentDate = format(currentDate, 'dd/MM/yyyy');
               
+              // Don't add duplicate payments for the same month
               if (!processedTransactions.some(t => 
                   format(parseISO(t.date.split('/').reverse().join('-')), 'yyyy-MM') === 
                   format(currentDate, 'yyyy-MM') && 
                   t.description.includes('Contrato'))) {
                 
+                // Create a unique transaction ID for contract-based payments using UUID format
+                // We'll use the actual transaction ID if it exists in the database
                 const yearMonth = format(currentDate, 'yyyy-MM');
                 const contractTransactionId = `contract-${yearMonth}-${clientId.substring(0, 8)}`;
                 
@@ -162,6 +174,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
           }
         }
         
+        // Sort transactions by date (newest first)
         processedTransactions.sort((a, b) => {
           const dateA = parseISO(a.date.split('/').reverse().join('-'));
           const dateB = parseISO(b.date.split('/').reverse().join('-'));
@@ -186,8 +199,9 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
     fetchTransactions();
   }, [clientId]);
 
-  const handleMarkAsCompleted = async (transaction: Transaction) => {
+  const handleMarkAsReceived = async (transaction: Transaction) => {
     try {
+      // Skip for recurring transactions that don't exist in the database yet
       if (transaction.id.includes('recurrence')) {
         toast({
           title: "Operação não permitida",
@@ -197,16 +211,21 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
         return;
       }
       
+      // Skip for contract-based transactions that are generated on the fly
       if (transaction.id.startsWith('contract-')) {
+        // For contract transactions, we need to create a real transaction record
         setProcessingId(transaction.id);
         
+        // Parse the date from display format to ISO format
         const dateParts = transaction.date.split('/');
         const isoDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
         
+        // Check if user is available
         if (!user || !user.id) {
           throw new Error("Usuário não autenticado");
         }
         
+        // Insert a new transaction record for this contract payment
         const { data: newTransaction, error: insertError } = await supabase
           .from('transactions')
           .insert({
@@ -217,7 +236,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             type: 'income',
             status: 'completed',
             client_id: clientId,
-            user_id: user.id
+            user_id: user.id // Add the user_id field that was missing
           })
           .select()
           .single();
@@ -233,6 +252,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
         return;
       }
       
+      // For regular transactions that exist in the database
       setProcessingId(transaction.id);
       
       const { error } = await supabase
@@ -260,100 +280,25 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
     }
   };
 
-  const handleMarkAsPending = async (transaction: Transaction) => {
-    try {
-      if (transaction.id.includes('recurrence') || transaction.id.startsWith('contract-')) {
-        toast({
-          title: "Operação não permitida",
-          description: "Não é possível alterar o status de um pagamento que ainda não existe no banco de dados.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      setProcessingId(transaction.id);
-      
-      const { error } = await supabase
-        .from('transactions')
-        .update({ status: 'pending' })
-        .eq('id', transaction.id);
-
-      if (error) throw error;
-      
-      toast({
-        title: "Status atualizado",
-        description: "A transação foi marcada como pendente",
-      });
-      
-      fetchTransactions();
-    } catch (error: any) {
-      console.error('Error marking as pending:', error);
-      toast({
-        title: "Erro ao atualizar status",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleMarkAsOverdue = async (transaction: Transaction) => {
-    try {
-      if (transaction.id.includes('recurrence') || transaction.id.startsWith('contract-')) {
-        toast({
-          title: "Operação não permitida",
-          description: "Não é possível alterar o status de um pagamento que ainda não existe no banco de dados.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      setProcessingId(transaction.id);
-      
-      const { error } = await supabase
-        .from('transactions')
-        .update({ status: 'overdue' })
-        .eq('id', transaction.id);
-
-      if (error) throw error;
-      
-      toast({
-        title: "Status atualizado",
-        description: "A transação foi marcada como atrasada",
-      });
-      
-      fetchTransactions();
-    } catch (error: any) {
-      console.error('Error marking as overdue:', error);
-      toast({
-        title: "Erro ao atualizar status",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
+  const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case 'completed':
-        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-500">
-          <Check className="h-3 w-3 mr-1" /> Recebido
-        </span>;
+        return 'bg-green-500/20 text-green-500';
       case 'pending':
-        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-500">
-          <Clock className="h-3 w-3 mr-1" /> Pendente
-        </span>;
-      case 'overdue':
-        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-500">
-          <AlertTriangle className="h-3 w-3 mr-1" /> Atrasado
-        </span>;
+        return 'bg-yellow-500/20 text-yellow-500';
       default:
-        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-500">
-          {status}
-        </span>;
+        return 'bg-gray-500/20 text-gray-500';
+    }
+  };
+  
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'Recebido';
+      case 'pending':
+        return 'Pendente';
+      default:
+        return status;
     }
   };
 
@@ -365,8 +310,8 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             <TableHead className="w-[100px]">Data</TableHead>
             <TableHead>Descrição</TableHead>
             <TableHead>Categoria</TableHead>
-            <TableHead>Status</TableHead>
             <TableHead className="text-right">Valor</TableHead>
+            <TableHead>Status</TableHead>
             <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
@@ -410,73 +355,36 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
                     {transaction.category}
                   </Badge>
                 </TableCell>
-                <TableCell>
-                  {getStatusBadge(transaction.status)}
-                  {(transaction.recurrence_count || transaction.id.startsWith('contract-')) && transaction.status === 'pending' && (
-                    <span className="ml-1 text-xs text-fin-green"> (Futuro)</span>
-                  )}
-                </TableCell>
                 <TableCell className="text-right font-semibold text-fin-green">
                   {transaction.value.toLocaleString('pt-BR', { 
                     style: 'currency', 
                     currency: 'BRL' 
                   })}
                 </TableCell>
+                <TableCell>
+                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(transaction.status)}`}>
+                    {getStatusText(transaction.status)}
+                    {(transaction.recurrence_count || transaction.id.startsWith('contract-')) && transaction.status === 'pending' && (
+                      <span className="ml-1 text-xs text-fin-green"> (Futuro)</span>
+                    )}
+                  </span>
+                </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex justify-end space-x-1">
-                    {transaction.status !== "completed" && (
-                      <Button 
-                        variant="receipt" 
-                        size="icon" 
-                        className="h-8 w-8"
-                        onClick={() => handleMarkAsCompleted(transaction)}
-                        disabled={processingId === transaction.id}
-                        title="Marcar como recebido"
-                      >
-                        {processingId === transaction.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Check className="h-4 w-4" />
-                        )}
-                      </Button>
-                    )}
-                    {!transaction.id.includes('recurrence') && !transaction.id.startsWith('contract-') && (
-                      <>
-                        {transaction.status !== "pending" && (
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-8 w-8"
-                            onClick={() => handleMarkAsPending(transaction)}
-                            disabled={processingId === transaction.id}
-                            title="Marcar como pendente"
-                          >
-                            {processingId === transaction.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Clock className="h-4 w-4" />
-                            )}
-                          </Button>
-                        )}
-                        {transaction.status !== "overdue" && (
-                          <Button 
-                            variant="destructive" 
-                            size="icon" 
-                            className="h-8 w-8 bg-red-500/20 hover:bg-red-500/30 text-red-500"
-                            onClick={() => handleMarkAsOverdue(transaction)}
-                            disabled={processingId === transaction.id}
-                            title="Marcar como atrasado"
-                          >
-                            {processingId === transaction.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <AlertTriangle className="h-4 w-4" />
-                            )}
-                          </Button>
-                        )}
-                      </>
-                    )}
-                  </div>
+                  {transaction.status === 'pending' && (
+                    <Button 
+                      variant="receipt" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => handleMarkAsReceived(transaction)}
+                      disabled={processingId === transaction.id}
+                    >
+                      {processingId === transaction.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))

@@ -221,10 +221,7 @@ export type Database = {
           created_at: string
           date: string
           description: string
-          due_date: string | null
           id: string
-          payment_method: string | null
-          recipient: string | null
           recurrence: string | null
           recurrence_count: number | null
           status: string
@@ -240,10 +237,7 @@ export type Database = {
           created_at?: string
           date?: string
           description: string
-          due_date?: string | null
           id?: string
-          payment_method?: string | null
-          recipient?: string | null
           recurrence?: string | null
           recurrence_count?: number | null
           status?: string
@@ -259,10 +253,7 @@ export type Database = {
           created_at?: string
           date?: string
           description?: string
-          due_date?: string | null
           id?: string
-          payment_method?: string | null
-          recipient?: string | null
           recurrence?: string | null
           recurrence_count?: number | null
           status?: string
@@ -290,81 +281,7 @@ export type Database = {
       }
     }
     Views: {
-      payments_view: {
-        Row: {
-          category: string | null
-          category_id: string | null
-          client_id: string | null
-          created_at: string | null
-          date: string | null
-          description: string | null
-          due_date: string | null
-          id: string | null
-          payment_method: string | null
-          recipient: string | null
-          recurrence: string | null
-          recurrence_count: number | null
-          status: string | null
-          type: string | null
-          updated_at: string | null
-          user_id: string | null
-          value: number | null
-        }
-        Insert: {
-          category?: string | null
-          category_id?: string | null
-          client_id?: string | null
-          created_at?: string | null
-          date?: string | null
-          description?: string | null
-          due_date?: string | null
-          id?: string | null
-          payment_method?: string | null
-          recipient?: string | null
-          recurrence?: string | null
-          recurrence_count?: number | null
-          status?: string | null
-          type?: string | null
-          updated_at?: string | null
-          user_id?: string | null
-          value?: number | null
-        }
-        Update: {
-          category?: string | null
-          category_id?: string | null
-          client_id?: string | null
-          created_at?: string | null
-          date?: string | null
-          description?: string | null
-          due_date?: string | null
-          id?: string | null
-          payment_method?: string | null
-          recipient?: string | null
-          recurrence?: string | null
-          recurrence_count?: number | null
-          status?: string | null
-          type?: string | null
-          updated_at?: string | null
-          user_id?: string | null
-          value?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "transactions_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "categories"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transactions_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+      [_ in never]: never
     }
     Functions: {
       [_ in never]: never

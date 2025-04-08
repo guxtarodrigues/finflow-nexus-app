@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, Loader2, ArrowUp, ArrowDown, Check, Clock, AlertTriangle } from "lucide-react";
+import { Trash2, Loader2, ArrowUp, ArrowDown, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -29,73 +29,45 @@ interface TransactionListProps {
   loading: boolean;
   onDeleteTransaction: (id: string) => void;
   onStatusChange?: () => void;
-  showStatusActions?: boolean;
 }
 
 export const TransactionList = ({ 
   transactions, 
   loading, 
   onDeleteTransaction,
-  onStatusChange,
-  showStatusActions = true
+  onStatusChange 
 }: TransactionListProps) => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const updateTransactionStatus = async (id: string, status: string) => {
+  const handleMarkAsReceived = async (id: string) => {
     try {
       setProcessingId(id);
       
       const { error } = await supabase
         .from('transactions')
-        .update({ status })
+        .update({ status: 'completed' })
         .eq('id', id);
 
       if (error) throw error;
       
-      // Ensure parent component is notified of the status change
       if (onStatusChange) {
         onStatusChange();
       }
       
       toast({
-        title: "Status atualizado",
-        description: `A transação foi marcada como ${status === 'completed' ? 'concluída' : status === 'pending' ? 'pendente' : 'atrasada'} com sucesso`,
+        title: "Recebimento confirmado",
+        description: "O recebimento foi marcado como recebido com sucesso",
       });
     } catch (error: any) {
-      console.error(`Error updating status to ${status}:`, error);
+      console.error('Error marking as received:', error);
       toast({
-        title: "Erro ao atualizar status",
+        title: "Erro ao confirmar recebimento",
         description: error.message,
         variant: "destructive"
       });
     } finally {
       setProcessingId(null);
-    }
-  };
-
-  const handleMarkAsComplete = (id: string) => updateTransactionStatus(id, 'completed');
-  const handleMarkAsPending = (id: string) => updateTransactionStatus(id, 'pending');
-  const handleMarkAsOverdue = (id: string) => updateTransactionStatus(id, 'overdue');
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-500">
-          <Check className="h-3 w-3 mr-1" /> Concluído
-        </span>;
-      case 'pending':
-        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-500">
-          <Clock className="h-3 w-3 mr-1" /> Pendente
-        </span>;
-      case 'overdue':
-        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-500">
-          <AlertTriangle className="h-3 w-3 mr-1" /> Atrasado
-        </span>;
-      default:
-        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-500">
-          {status}
-        </span>;
     }
   };
 
@@ -108,7 +80,6 @@ export const TransactionList = ({
             <TableHead className="w-[100px]">Data</TableHead>
             <TableHead>Descrição</TableHead>
             <TableHead>Categoria</TableHead>
-            <TableHead>Status</TableHead>
             <TableHead className="text-right">Valor</TableHead>
             <TableHead className="text-right">Ações</TableHead>
           </TableRow>
@@ -116,7 +87,7 @@ export const TransactionList = ({
         <TableBody>
           {loading ? (
             <TableRow>
-              <TableCell colSpan={7} className="h-24 text-center">
+              <TableCell colSpan={6} className="h-24 text-center">
                 <div className="flex justify-center items-center">
                   <Loader2 className="h-6 w-6 text-fin-green animate-spin mr-2" />
                   <span>Carregando transações...</span>
@@ -125,7 +96,7 @@ export const TransactionList = ({
             </TableRow>
           ) : transactions.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                 Nenhuma transação encontrada.
               </TableCell>
             </TableRow>
@@ -150,9 +121,6 @@ export const TransactionList = ({
                     {transaction.category}
                   </Badge>
                 </TableCell>
-                <TableCell>
-                  {getStatusBadge(transaction.status)}
-                </TableCell>
                 <TableCell className={`text-right font-semibold ${
                   transaction.type === "income" ? "text-fin-green" : "text-fin-red"
                 }`}>
@@ -163,69 +131,30 @@ export const TransactionList = ({
                   })}
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex justify-end space-x-1">
-                    {showStatusActions && (
-                      <>
-                        {transaction.status !== "completed" && (
-                          <Button 
-                            variant="receipt" 
-                            size="icon" 
-                            className="h-8 w-8"
-                            onClick={() => handleMarkAsComplete(transaction.id)}
-                            disabled={processingId === transaction.id}
-                            title="Marcar como concluído"
-                          >
-                            {processingId === transaction.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Check className="h-4 w-4" />
-                            )}
-                          </Button>
-                        )}
-                        {transaction.status !== "pending" && (
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-8 w-8"
-                            onClick={() => handleMarkAsPending(transaction.id)}
-                            disabled={processingId === transaction.id}
-                            title="Marcar como pendente"
-                          >
-                            {processingId === transaction.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Clock className="h-4 w-4" />
-                            )}
-                          </Button>
-                        )}
-                        {transaction.status !== "overdue" && (
-                          <Button 
-                            variant="destructive" 
-                            size="icon" 
-                            className="h-8 w-8 bg-red-500/20 hover:bg-red-500/30 text-red-500"
-                            onClick={() => handleMarkAsOverdue(transaction.id)}
-                            disabled={processingId === transaction.id}
-                            title="Marcar como atrasado"
-                          >
-                            {processingId === transaction.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <AlertTriangle className="h-4 w-4" />
-                            )}
-                          </Button>
-                        )}
-                      </>
-                    )}
+                  {transaction.type === "income" && transaction.status === "pending" ? (
+                    <Button 
+                      variant="receipt" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => handleMarkAsReceived(transaction.id)}
+                      disabled={processingId === transaction.id}
+                    >
+                      {processingId === transaction.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                    </Button>
+                  ) : (
                     <Button 
                       variant="ghost" 
                       size="icon" 
                       className="h-8 w-8"
                       onClick={() => onDeleteTransaction(transaction.id)}
-                      title="Excluir transação"
                     >
                       <Trash2 className="h-4 w-4 text-muted-foreground" />
                     </Button>
-                  </div>
+                  )}
                 </TableCell>
               </TableRow>
             ))
