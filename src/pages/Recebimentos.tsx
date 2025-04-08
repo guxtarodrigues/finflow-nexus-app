@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { 
   ArrowLeftRight, 
@@ -44,6 +45,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface Receipt {
   id: string;
@@ -55,6 +64,7 @@ interface Receipt {
   status: string;
   client_id?: string;
   client_name?: string;
+  source?: string;
 }
 
 interface Category {
@@ -96,6 +106,7 @@ const Recebimentos = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null);
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
+  const [filterSource, setFilterSource] = useState<string | null>(null);
   const { user } = useAuth();
   
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -133,7 +144,7 @@ const Recebimentos = () => {
       fetchCategories();
       fetchClients();
     }
-  }, [filterStatus, user, dateRange]);
+  }, [filterStatus, filterSource, user, dateRange]);
 
   useEffect(() => {
     switch (dateFilterMode) {
@@ -221,14 +232,20 @@ const Recebimentos = () => {
       
       setLoading(true);
       
-      const { data: transactionsData, error: transactionsError } = await supabase
+      let query = supabase
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
         .eq('type', 'income')
         .gte('date', dateRange.from.toISOString())
-        .lte('date', dateRange.to.toISOString())
-        .order('date', { ascending: false });
+        .lte('date', dateRange.to.toISOString());
+      
+      // Apply status filter if set
+      if (filterStatus) {
+        query = query.eq('status', filterStatus);
+      }
+      
+      const { data: transactionsData, error: transactionsError } = await query.order('date', { ascending: false });
       
       if (transactionsError) throw transactionsError;
       
@@ -262,7 +279,29 @@ const Recebimentos = () => {
         }
       }
       
-      const formattedReceipts = typedTransactions.map((item) => {
+      // Also fetch payment data for completed payments received (representing income)
+      let paymentsData: any[] = [];
+      
+      try {
+        const { data: payments, error: paymentsError } = await supabase
+          .from('payments')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'completed')
+          .gte('due_date', dateRange.from.toISOString())
+          .lte('due_date', dateRange.to.toISOString())
+          .order('due_date', { ascending: false });
+          
+        if (!paymentsError && payments) {
+          paymentsData = payments;
+        }
+      } catch (error) {
+        console.error('Error fetching payments:', error);
+        // Continue without payments data
+      }
+      
+      // Format the transactions into receipts
+      const formattedTransactions = typedTransactions.map((item) => {
         const client = item.client_id ? clientsMap.get(item.client_id) : null;
         
         return {
@@ -274,11 +313,45 @@ const Recebimentos = () => {
           value: Number(item.value),
           status: item.status,
           client_id: item.client_id || undefined,
-          client_name: client ? client.name : undefined
+          client_name: client ? client.name : undefined,
+          source: 'transaction'
         };
       });
       
-      setReceipts(formattedReceipts);
+      // Format the payments into receipts
+      const formattedPayments = paymentsData.map((payment) => {
+        const client = payment.client_id ? clientsMap.get(payment.client_id) : null;
+        
+        return {
+          id: `payment-${payment.id}`,
+          date: format(new Date(payment.due_date), 'dd/MM/yyyy'),
+          description: `${payment.description} (Pagamento)`,
+          category: payment.category || 'Pagamento',
+          category_id: payment.category_id || '',
+          value: Number(payment.value),
+          status: 'completed', // All included payments are completed
+          client_id: payment.client_id || undefined,
+          client_name: client ? client.name : payment.recipient,
+          source: 'payment'
+        };
+      });
+      
+      // Combine all receipts
+      let allReceipts = [...formattedTransactions, ...formattedPayments];
+      
+      // Apply source filter if set
+      if (filterSource) {
+        allReceipts = allReceipts.filter(receipt => receipt.source === filterSource);
+      }
+      
+      // Sort by date (newest first)
+      allReceipts.sort((a, b) => {
+        const dateA = new Date(a.date.split('/').reverse().join('-'));
+        const dateB = new Date(b.date.split('/').reverse().join('-'));
+        return dateB.getTime() - dateA.getTime();
+      });
+      
+      setReceipts(allReceipts);
     } catch (error: any) {
       console.error('Error fetching receipts:', error);
       toast({
@@ -469,6 +542,16 @@ const Recebimentos = () => {
   };
 
   const openEditDialog = (receipt: Receipt) => {
+    // Only allow editing transactions, not payments
+    if (receipt.source === 'payment') {
+      toast({
+        title: "Edição não permitida",
+        description: "Pagamentos recebidos não podem ser editados aqui. Por favor, edite-os na página de Pagamentos.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setEditingReceipt({
       ...receipt,
       date: format(new Date(receipt.date.split('/').reverse().join('-')), 'yyyy-MM-dd'),
@@ -524,13 +607,24 @@ const Recebimentos = () => {
     }
   };
   
+  const getSourceText = (source?: string) => {
+    switch (source) {
+      case 'transaction':
+        return 'Transação';
+      case 'payment':
+        return 'Pagamento';
+      default:
+        return 'Outro';
+    }
+  };
+  
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Recebimentos</h1>
           <p className="text-muted-foreground">
-            Gerencie seus recebimentos e receitas
+            Gerencie todos os recebimentos e entradas financeiras da empresa
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -783,7 +877,7 @@ const Recebimentos = () => {
           <CardHeader className="pb-3">
             <CardTitle className="text-lg font-normal flex items-center">
               <Inbox className="mr-2 h-5 w-5 text-fin-green" />
-              Recebimentos
+              Recebimentos e Entradas
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -819,13 +913,22 @@ const Recebimentos = () => {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
                       <DropdownMenuItem onClick={() => setFilterStatus(null)}>
-                        Todos
+                        Todos os status
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setFilterStatus('pending')}>
                         Pendentes
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setFilterStatus('completed')}>
                         Recebidos
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="border-t border-[#2A2A2E] mt-2 pt-2" onClick={() => setFilterSource(null)}>
+                        Todas as fontes
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFilterSource('transaction')}>
+                        Transações
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFilterSource('payment')}>
+                        Pagamentos
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -846,68 +949,84 @@ const Recebimentos = () => {
                     <p className="text-muted-foreground">Nenhum recebimento encontrado</p>
                   </div>
                 ) : (
-                  <div className="relative">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-[#2A2A2E]">
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Data</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Descrição</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Cliente</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Categoria</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Valor</th>
-                          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Status</th>
-                          <th className="text-right p-3 text-xs font-medium text-muted-foreground">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredReceipts.map((receipt) => (
-                          <tr key={receipt.id} className="border-b border-[#2A2A2E] hover:bg-[#1F1F23]/50">
-                            <td className="p-3 text-sm">{receipt.date}</td>
-                            <td className="p-3 text-sm">{receipt.description}</td>
-                            <td className="p-3 text-sm">{receipt.client_name || "-"}</td>
-                            <td className="p-3 text-sm">{receipt.category}</td>
-                            <td className="p-3 text-sm font-medium text-fin-green">
-                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(receipt.value)}
-                            </td>
-                            <td className="p-3 text-sm">
-                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(receipt.status)}`}>
-                                {getStatusText(receipt.status)}
-                              </span>
-                            </td>
-                            <td className="p-3 text-sm text-right">
-                              <div className="flex justify-end gap-2">
-                                {receipt.status === 'pending' ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-green-500 hover:text-green-400 hover:bg-green-500/10"
-                                    onClick={() => handleStatusChange(receipt.id, 'completed')}
-                                    title="Marcar como recebido"
-                                  >
-                                    <Check className="h-4 w-4" />
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10"
-                                    onClick={() => handleStatusChange(receipt.id, 'pending')}
-                                    title="Marcar como pendente"
-                                  >
-                                    <Clock className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-[#2A2A2E] border-[#2A2A2E]">
+                        <TableHead className="w-[100px]">Data</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Categoria</TableHead>
+                        <TableHead>Fonte</TableHead>
+                        <TableHead className="text-right">Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredReceipts.map((receipt) => (
+                        <TableRow key={receipt.id} className="border-b border-[#2A2A2E] hover:bg-[#1F1F23]/50">
+                          <TableCell className="font-medium">{receipt.date}</TableCell>
+                          <TableCell>{receipt.description}</TableCell>
+                          <TableCell>{receipt.client_name || "-"}</TableCell>
+                          <TableCell>{receipt.category}</TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-500">
+                              {getSourceText(receipt.source)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-fin-green">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(receipt.value)}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(receipt.status)}`}>
+                              {getStatusText(receipt.status)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              {receipt.source !== 'payment' && receipt.status === 'pending' ? (
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
-                                  onClick={() => openEditDialog(receipt)}
-                                  title="Editar"
+                                  className="h-8 w-8 text-green-500 hover:text-green-400 hover:bg-green-500/10"
+                                  onClick={() => handleStatusChange(receipt.id, 'completed')}
+                                  title="Marcar como recebido"
                                 >
-                                  <Pencil className="h-4 w-4" />
+                                  <Check className="h-4 w-4" />
                                 </Button>
-                                
+                              ) : receipt.source !== 'payment' && receipt.status === 'completed' ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10"
+                                  onClick={() => handleStatusChange(receipt.id, 'pending')}
+                                  title="Marcar como pendente"
+                                >
+                                  <Clock className="h-4 w-4" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground opacity-50"
+                                  disabled
+                                >
+                                  <Clock className="h-4 w-4" />
+                                </Button>
+                              )}
+                              
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={`h-8 w-8 ${receipt.source === 'payment' ? 'text-muted-foreground opacity-50' : 'text-blue-500 hover:text-blue-400 hover:bg-blue-500/10'}`}
+                                onClick={() => receipt.source !== 'payment' && openEditDialog(receipt)}
+                                disabled={receipt.source === 'payment'}
+                                title={receipt.source === 'payment' ? "Edite na página de Pagamentos" : "Editar"}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              
+                              {receipt.source !== 'payment' && (
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button
@@ -952,13 +1071,39 @@ const Recebimentos = () => {
                                     </AlertDialogFooter>
                                   </AlertDialogContent>
                                 </AlertDialog>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                              )}
+                              {receipt.source === 'payment' && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground opacity-50"
+                                  disabled
+                                  title="Exclua na página de Pagamentos"
+                                >
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="h-4 w-4"
+                                  >
+                                    <path d="M3 6h18" />
+                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                    <line x1="10" y1="11" x2="10" y2="17" />
+                                    <line x1="14" y1="11" x2="14" y2="17" />
+                                  </svg>
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 )}
               </div>
             </div>
