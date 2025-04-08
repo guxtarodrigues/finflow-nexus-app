@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   CreditCard, 
   ChevronDown, 
@@ -11,7 +11,8 @@ import {
   CalendarDays,
   Check,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,70 +32,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { format, parseISO } from "date-fns";
 
-// Mock data for payments
-const paymentsData = [
-  {
-    id: 1,
-    dueDate: "15/04/2025",
-    description: "Aluguel Escritório",
-    recipient: "Imobiliária Silva",
-    value: 1200.00,
-    status: "pending",
-    paymentMethod: "Transferência",
-    recurrence: "Mensal"
-  },
-  {
-    id: 2,
-    dueDate: "17/04/2025",
-    description: "Internet Empresarial",
-    recipient: "Telecom Brasil",
-    value: 189.90,
-    status: "pending",
-    paymentMethod: "Débito Automático",
-    recurrence: "Mensal"
-  },
-  {
-    id: 3,
-    dueDate: "20/04/2025",
-    description: "Serviço de Contabilidade",
-    recipient: "Contabil Express",
-    value: 450.00,
-    status: "pending",
-    paymentMethod: "Transferência",
-    recurrence: "Mensal"
-  },
-  {
-    id: 4,
-    dueDate: "05/04/2025",
-    description: "Assinatura Software ERP",
-    recipient: "Cloud Solutions",
-    value: 99.90,
-    status: "completed",
-    paymentMethod: "Cartão de Crédito",
-    recurrence: "Mensal"
-  },
-  {
-    id: 5,
-    dueDate: "02/04/2025",
-    description: "Impostos Municipais",
-    recipient: "Prefeitura",
-    value: 780.45,
-    status: "completed",
-    paymentMethod: "Transferência",
-    recurrence: "Trimestral"
-  },
-  {
-    id: 6,
-    dueDate: "10/04/2025",
-    description: "Seguro Empresarial",
-    recipient: "Seguradora Confiança",
-    value: 350.00,
-    status: "overdue",
-    paymentMethod: "Boleto",
-    recurrence: "Anual"
-  },
-];
+// Define the Payment type
+interface Payment {
+  id: string;
+  due_date: string;
+  description: string;
+  recipient: string;
+  value: number;
+  status: string;
+  payment_method: string;
+  recurrence: string;
+}
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -123,6 +77,160 @@ const getStatusBadge = (status: string) => {
 
 const Pagamentos = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string | null>(null);
+  
+  // New payment form state
+  const [newPayment, setNewPayment] = useState({
+    description: "",
+    recipient: "",
+    value: "",
+    due_date: "",
+    payment_method: "Transferência",
+    recurrence: "Mensal",
+    status: "pending"
+  });
+  
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchPayments();
+  }, [filterStatus]);
+
+  const fetchPayments = async () => {
+    try {
+      setLoading(true);
+      
+      // Start building the query
+      let query = supabase
+        .from('payments')
+        .select('*')
+        .order('due_date', { ascending: true });
+      
+      // Apply filter if set
+      if (filterStatus) {
+        query = query.eq('status', filterStatus);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      
+      // Format the payments data
+      const formattedPayments = data.map((item) => ({
+        id: item.id,
+        due_date: format(new Date(item.due_date), 'dd/MM/yyyy'),
+        description: item.description,
+        recipient: item.recipient,
+        value: Number(item.value),
+        status: item.status,
+        payment_method: item.payment_method,
+        recurrence: item.recurrence
+      }));
+      
+      setPayments(formattedPayments);
+    } catch (error: any) {
+      console.error('Error fetching payments:', error);
+      toast({
+        title: "Erro ao carregar pagamentos",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreatePayment = async () => {
+    try {
+      if (!newPayment.description || !newPayment.recipient || !newPayment.value || !newPayment.due_date) {
+        toast({
+          title: "Dados incompletos",
+          description: "Preencha todos os campos obrigatórios",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('payments')
+        .insert([
+          {
+            description: newPayment.description,
+            recipient: newPayment.recipient,
+            value: Number(newPayment.value),
+            due_date: new Date(newPayment.due_date),
+            payment_method: newPayment.payment_method,
+            recurrence: newPayment.recurrence,
+            status: newPayment.status
+          }
+        ])
+        .select();
+
+      if (error) throw error;
+      
+      // Reset form and close dialog
+      setNewPayment({
+        description: "",
+        recipient: "",
+        value: "",
+        due_date: "",
+        payment_method: "Transferência",
+        recurrence: "Mensal",
+        status: "pending"
+      });
+      setIsDialogOpen(false);
+      
+      // Refresh payment list
+      await fetchPayments();
+      
+      toast({
+        title: "Pagamento agendado",
+        description: "O pagamento foi registrado com sucesso",
+      });
+    } catch (error: any) {
+      console.error('Error creating payment:', error);
+      toast({
+        title: "Erro ao criar pagamento",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeletePayment = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('payments')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      // Refresh payment list
+      await fetchPayments();
+      
+      toast({
+        title: "Pagamento excluído",
+        description: "O pagamento foi removido com sucesso",
+      });
+    } catch (error: any) {
+      console.error('Error deleting payment:', error);
+      toast({
+        title: "Erro ao excluir pagamento",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Filter payments based on search term
+  const filteredPayments = payments.filter(payment => 
+    payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    payment.recipient.toLowerCase().includes(searchTerm.toLowerCase())
+  );
   
   return (
     <div className="space-y-6">
@@ -133,9 +241,110 @@ const Pagamentos = () => {
             Gerencie seus pagamentos e contas a pagar
           </p>
         </div>
-        <Button className="bg-fin-green text-black hover:bg-fin-green/90">
-          <Plus className="mr-2 h-4 w-4" /> Novo Pagamento
-        </Button>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-fin-green text-black hover:bg-fin-green/90">
+              <Plus className="mr-2 h-4 w-4" /> Novo Pagamento
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px] bg-[#1A1A1E] border-[#2A2A2E] text-white">
+            <DialogHeader>
+              <DialogTitle>Novo Pagamento</DialogTitle>
+              <DialogDescription>
+                Adicione um novo pagamento ao sistema.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="description" className="text-right">
+                  Descrição
+                </Label>
+                <Input
+                  id="description"
+                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
+                  value={newPayment.description}
+                  onChange={(e) => setNewPayment({...newPayment, description: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="recipient" className="text-right">
+                  Destinatário
+                </Label>
+                <Input
+                  id="recipient"
+                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
+                  value={newPayment.recipient}
+                  onChange={(e) => setNewPayment({...newPayment, recipient: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="value" className="text-right">
+                  Valor
+                </Label>
+                <Input
+                  id="value"
+                  type="number"
+                  step="0.01"
+                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
+                  value={newPayment.value}
+                  onChange={(e) => setNewPayment({...newPayment, value: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="due_date" className="text-right">
+                  Vencimento
+                </Label>
+                <Input
+                  id="due_date"
+                  type="date"
+                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
+                  value={newPayment.due_date}
+                  onChange={(e) => setNewPayment({...newPayment, due_date: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="payment_method" className="text-right">
+                  Método
+                </Label>
+                <select
+                  id="payment_method"
+                  className="col-span-3 bg-[#1F1F23] border border-[#2A2A2E] rounded-md h-10 px-3 text-base focus:outline-none"
+                  value={newPayment.payment_method}
+                  onChange={(e) => setNewPayment({...newPayment, payment_method: e.target.value})}
+                >
+                  <option value="Transferência">Transferência</option>
+                  <option value="Débito Automático">Débito Automático</option>
+                  <option value="Boleto">Boleto</option>
+                  <option value="Cartão de Crédito">Cartão de Crédito</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="recurrence" className="text-right">
+                  Recorrência
+                </Label>
+                <select
+                  id="recurrence"
+                  className="col-span-3 bg-[#1F1F23] border border-[#2A2A2E] rounded-md h-10 px-3 text-base focus:outline-none"
+                  value={newPayment.recurrence}
+                  onChange={(e) => setNewPayment({...newPayment, recurrence: e.target.value})}
+                >
+                  <option value="Único">Único</option>
+                  <option value="Mensal">Mensal</option>
+                  <option value="Trimestral">Trimestral</option>
+                  <option value="Anual">Anual</option>
+                </select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button 
+                className="bg-fin-green text-black hover:bg-fin-green/90" 
+                onClick={handleCreatePayment}
+              >
+                Salvar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="flex flex-col space-y-5">
@@ -169,11 +378,18 @@ const Pagamentos = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                      <DropdownMenuItem>Todos</DropdownMenuItem>
-                      <DropdownMenuItem>Pendentes</DropdownMenuItem>
-                      <DropdownMenuItem>Pagos</DropdownMenuItem>
-                      <DropdownMenuItem>Atrasados</DropdownMenuItem>
-                      <DropdownMenuItem>Este mês</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFilterStatus(null)}>
+                        Todos
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFilterStatus('pending')}>
+                        Pendentes
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFilterStatus('completed')}>
+                        Pagos
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFilterStatus('overdue')}>
+                        Atrasados
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                   
@@ -197,31 +413,53 @@ const Pagamentos = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paymentsData.map((payment) => (
-                      <TableRow key={payment.id} className="hover:bg-[#1F1F23] border-[#2A2A2E]">
-                        <TableCell className="font-medium">
-                          <div className="flex items-center">
-                            <CalendarDays className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
-                            {payment.dueDate}
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          <div className="flex justify-center items-center">
+                            <Loader2 className="h-6 w-6 text-fin-green animate-spin mr-2" />
+                            <span>Carregando pagamentos...</span>
                           </div>
                         </TableCell>
-                        <TableCell>{payment.description}</TableCell>
-                        <TableCell>{payment.recipient}</TableCell>
-                        <TableCell>{payment.recurrence}</TableCell>
-                        <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {payment.value.toLocaleString('pt-BR', { 
-                            style: 'currency', 
-                            currency: 'BRL' 
-                          })}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Trash2 className="h-4 w-4 text-muted-foreground" />
-                          </Button>
+                      </TableRow>
+                    ) : filteredPayments.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                          Nenhum pagamento encontrado.
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      filteredPayments.map((payment) => (
+                        <TableRow key={payment.id} className="hover:bg-[#1F1F23] border-[#2A2A2E]">
+                          <TableCell className="font-medium">
+                            <div className="flex items-center">
+                              <CalendarDays className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                              {payment.due_date}
+                            </div>
+                          </TableCell>
+                          <TableCell>{payment.description}</TableCell>
+                          <TableCell>{payment.recipient}</TableCell>
+                          <TableCell>{payment.recurrence}</TableCell>
+                          <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {payment.value.toLocaleString('pt-BR', { 
+                              style: 'currency', 
+                              currency: 'BRL' 
+                            })}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8"
+                              onClick={() => handleDeletePayment(payment.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
