@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DateRange } from "react-day-picker";
 
 interface DateFilterProps {
   dateRange: {
@@ -63,7 +64,10 @@ export const DateFilter = ({
             selected={dateRange}
             onSelect={(value) => {
               if (value?.from && value?.to) {
-                onDateRangeChange(value);
+                onDateRangeChange({
+                  from: value.from,
+                  to: value.to
+                });
               }
             }}
             numberOfMonths={2}
