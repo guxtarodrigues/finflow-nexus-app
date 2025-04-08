@@ -65,7 +65,7 @@ export const DateFilter = ({
               from: dateRange.from,
               to: dateRange.to
             }}
-            onSelect={(value: DateRange | undefined) => {
+            onSelect={(value) => {
               if (value?.from && value?.to) {
                 onDateRangeChange({
                   from: value.from,

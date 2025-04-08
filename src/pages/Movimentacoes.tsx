@@ -1,118 +1,418 @@
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { 
+  ArrowLeftRight, 
+  ChevronDown, 
+  Download, 
+  Filter, 
+  Plus, 
+  Search,
+  Loader2 
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { Category, Transaction } from "@/types";
+import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext";
+import { TransactionList } from "@/components/transactions/TransactionList";
+import { DateFilter } from "@/components/payments/DateFilter";
+import { startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
+
+// Define the Transaction type based on the database schema
+interface Transaction {
+  id: string;
+  date: string;
+  description: string;
+  category: string;
+  type: string;
+  value: number;
+  status: string;
+}
 
 const Movimentacoes = () => {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loadingCategories, setLoadingCategories] = useState(true);
-  const [loadingTransactions, setLoadingTransactions] = useState(true);
-  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [filterType, setFilterType] = useState<string | null>(null);
   const { user } = useAuth();
   
-  const fetchCategories = async () => {
-    try {
-      if (!user) return;
-      
-      setLoadingCategories(true);
-      
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('user_id', user.id)
-        .in('type', ['income', 'expense'])
-        .order('name', { ascending: true });
-      
-      if (error) throw error;
-      
-      setCategories(data as Category[]);
-    } catch (error: any) {
-      console.error('Error fetching categories:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar as categorias",
-        variant: "destructive",
-      });
-    } finally {
-      setLoadingCategories(false);
+  // Date filter states
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [dateRange, setDateRange] = useState<{
+    from: Date;
+    to: Date;
+  }>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date())
+  });
+  const [dateFilterMode, setDateFilterMode] = useState<"current" | "prev" | "next" | "custom">("current");
+  
+  // New transaction form state
+  const [newTransaction, setNewTransaction] = useState({
+    description: "",
+    category: "",
+    type: "income",
+    value: ""
+  });
+  
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (user) {
+      fetchTransactions();
     }
-  };
+  }, [filterType, user, dateRange]);
+
+  // Update date range when date filter mode changes
+  useEffect(() => {
+    switch (dateFilterMode) {
+      case "current":
+        setDateRange({
+          from: startOfMonth(currentDate),
+          to: endOfMonth(currentDate)
+        });
+        break;
+      case "prev":
+        setDateRange({
+          from: startOfMonth(subMonths(currentDate, 1)),
+          to: endOfMonth(subMonths(currentDate, 1))
+        });
+        break;
+      case "next":
+        setDateRange({
+          from: startOfMonth(addMonths(currentDate, 1)),
+          to: endOfMonth(addMonths(currentDate, 1))
+        });
+        break;
+      // Custom range is handled directly by the date picker
+    }
+  }, [dateFilterMode, currentDate]);
 
   const fetchTransactions = async () => {
     try {
       if (!user) return;
       
-      setLoadingTransactions(true);
+      setLoading(true);
       
-      const { data, error } = await supabase
+      // Start building the query
+      let query = supabase
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
+        .gte('date', dateRange.from.toISOString())
+        .lte('date', dateRange.to.toISOString())
         .order('date', { ascending: false });
+      
+      // Apply filter if set
+      if (filterType) {
+        if (filterType === 'income' || filterType === 'expense') {
+          query = query.eq('type', filterType);
+        }
+      }
+      
+      const { data, error } = await query;
       
       if (error) throw error;
       
-      setTransactions(data as Transaction[]);
+      if (!data) {
+        setTransactions([]);
+        return;
+      }
+      
+      // Format the transactions data
+      const formattedTransactions = data.map((item) => ({
+        id: item.id,
+        date: format(new Date(item.date), 'dd/MM/yyyy'),
+        description: item.description,
+        category: item.category,
+        type: item.type,
+        value: Number(item.value),
+        status: item.status
+      }));
+      
+      setTransactions(formattedTransactions);
     } catch (error: any) {
       console.error('Error fetching transactions:', error);
       toast({
-        title: "Erro",
-        description: "Não foi possível carregar as movimentações",
-        variant: "destructive",
+        title: "Erro ao carregar transações",
+        description: error.message,
+        variant: "destructive"
       });
     } finally {
-      setLoadingTransactions(false);
+      setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchCategories();
-    fetchTransactions();
-  }, [user]);
+  const handleCreateTransaction = async () => {
+    try {
+      if (!user) return;
+      
+      if (!newTransaction.description || !newTransaction.category || !newTransaction.value) {
+        toast({
+          title: "Dados incompletos",
+          description: "Preencha todos os campos obrigatórios",
+          variant: "destructive"
+        });
+        return;
+      }
 
+      // Insert single object (not an array) and format data correctly
+      const { error } = await supabase
+        .from('transactions')
+        .insert({
+          description: newTransaction.description,
+          category: newTransaction.category,
+          type: newTransaction.type,
+          value: Number(newTransaction.value),
+          date: new Date().toISOString(),
+          status: 'completed',
+          user_id: user.id
+        });
+
+      if (error) throw error;
+      
+      // Reset form and close dialog
+      setNewTransaction({
+        description: "",
+        category: "",
+        type: "income",
+        value: ""
+      });
+      setIsDialogOpen(false);
+      
+      // Refresh transaction list
+      await fetchTransactions();
+      
+      toast({
+        title: "Transação criada",
+        description: "A transação foi registrada com sucesso",
+      });
+    } catch (error: any) {
+      console.error('Error creating transaction:', error);
+      toast({
+        title: "Erro ao criar transação",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteTransaction = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      // Refresh transaction list
+      await fetchTransactions();
+      
+      toast({
+        title: "Transação excluída",
+        description: "A transação foi removida com sucesso",
+      });
+    } catch (error: any) {
+      console.error('Error deleting transaction:', error);
+      toast({
+        title: "Erro ao excluir transação",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Date filter handlers
+  const handlePrevMonth = () => {
+    setDateFilterMode("prev");
+    setCurrentDate(prevDate => subMonths(prevDate, 1));
+  };
+
+  const handleNextMonth = () => {
+    setDateFilterMode("next");
+    setCurrentDate(prevDate => addMonths(prevDate, 1));
+  };
+
+  const handleCurrentMonth = () => {
+    setDateFilterMode("current");
+    setCurrentDate(new Date());
+  };
+
+  const handleDateRangeChange = (range: { from: Date; to: Date }) => {
+    setDateRange(range);
+    setDateFilterMode("custom");
+  };
+
+  // Filter transactions based on search term
+  const filteredTransactions = transactions.filter(transaction => 
+    transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    transaction.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Movimentações</h1>
-      <div className="grid gap-6">
-        {loadingTransactions ? (
-          <div>Carregando movimentações...</div>
-        ) : transactions.length === 0 ? (
-          <div>Nenhuma movimentação encontrada.</div>
-        ) : (
-          <div className="space-y-4">
-            {/* Aqui você pode implementar o componente de lista de transações */}
-            {transactions.map((transaction) => (
-              <div 
-                key={transaction.id} 
-                className="p-4 bg-card rounded-lg border shadow-sm"
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Movimentações</h1>
+          <p className="text-muted-foreground">
+            Gerenciamento de receitas e despesas
+          </p>
+        </div>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-fin-green text-black hover:bg-fin-green/90">
+              <Plus className="mr-2 h-4 w-4" /> Nova Movimentação
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px] bg-[#1A1A1E] border-[#2A2A2E] text-white">
+            <DialogHeader>
+              <DialogTitle>Nova Movimentação</DialogTitle>
+              <DialogDescription>
+                Adicione uma nova transação financeira ao sistema.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="description" className="text-right">
+                  Descrição
+                </Label>
+                <Input
+                  id="description"
+                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
+                  value={newTransaction.description}
+                  onChange={(e) => setNewTransaction({...newTransaction, description: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="category" className="text-right">
+                  Categoria
+                </Label>
+                <Input
+                  id="category"
+                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
+                  value={newTransaction.category}
+                  onChange={(e) => setNewTransaction({...newTransaction, category: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="type" className="text-right">
+                  Tipo
+                </Label>
+                <select
+                  id="type"
+                  className="col-span-3 bg-[#1F1F23] border border-[#2A2A2E] rounded-md h-10 px-3 text-base focus:outline-none"
+                  value={newTransaction.type}
+                  onChange={(e) => setNewTransaction({...newTransaction, type: e.target.value})}
+                >
+                  <option value="income">Receita</option>
+                  <option value="expense">Despesa</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="value" className="text-right">
+                  Valor
+                </Label>
+                <Input
+                  id="value"
+                  type="number"
+                  step="0.01"
+                  className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
+                  value={newTransaction.value}
+                  onChange={(e) => setNewTransaction({...newTransaction, value: e.target.value})}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button 
+                className="bg-fin-green text-black hover:bg-fin-green/90" 
+                onClick={handleCreateTransaction}
               >
-                <div className="flex justify-between">
-                  <div>
-                    <h3 className="font-medium">{transaction.description}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(transaction.date).toLocaleDateString('pt-BR')}
-                    </p>
-                  </div>
-                  <div className={`font-semibold ${transaction.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
-                    {transaction.type === 'income' ? '+' : '-'} 
-                    {new Intl.NumberFormat('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL'
-                    }).format(transaction.value)}
-                  </div>
+                Salvar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="flex flex-col space-y-5">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg font-normal flex items-center">
+              <ArrowLeftRight className="mr-2 h-5 w-5 text-fin-green" />
+              Todas as Movimentações
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col space-y-4">
+              <div className="flex justify-between items-center flex-wrap gap-2">
+                <div className="relative w-full max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Buscar movimentações..."
+                    className="pl-8 bg-[#1F1F23] border-[#2A2A2E]"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
                 </div>
-                <div className="mt-2">
-                  <span className="text-xs px-2 py-1 rounded-full bg-secondary">
-                    {transaction.category}
-                  </span>
+                
+                <div className="flex flex-wrap gap-2 items-center">
+                  {/* Date filter component */}
+                  <DateFilter 
+                    dateRange={dateRange}
+                    dateFilterMode={dateFilterMode}
+                    onPrevMonth={handlePrevMonth}
+                    onNextMonth={handleNextMonth}
+                    onCurrentMonth={handleCurrentMonth}
+                    onDateRangeChange={handleDateRangeChange}
+                  />
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="border-[#2A2A2E] bg-[#1F1F23]">
+                        <Filter className="mr-2 h-4 w-4" /> Filtrar
+                        <ChevronDown className="ml-2 h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={() => setFilterType(null)}>
+                        Todas
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFilterType('income')}>
+                        Receitas
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFilterType('expense')}>
+                        Despesas
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  
+                  <Button variant="outline" className="border-[#2A2A2E] bg-[#1F1F23]">
+                    <Download className="mr-2 h-4 w-4" /> Exportar
+                  </Button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+              
+              <TransactionList 
+                transactions={filteredTransactions}
+                loading={loading}
+                onDeleteTransaction={handleDeleteTransaction}
+              />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -1,159 +1,766 @@
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { 
+  CreditCard, 
+  ChevronDown, 
+  Download, 
+  Filter, 
+  Plus, 
+  Search, 
+  Trash2,
+  CalendarDays,
+  Check,
+  Clock,
+  AlertCircle,
+  Loader2,
+  Repeat,
+  Banknote,
+  ArrowRight,
+  LayoutGrid
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { Category, Client, Payment } from "@/types";
+import { useToast } from "@/hooks/use-toast";
+import { format, startOfMonth, endOfMonth, subMonths, addMonths, parseISO, isWithinInterval } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { PaymentCalendarView } from "@/components/payments/PaymentCalendarView";
+import { DateFilter } from "@/components/payments/DateFilter";
+
+interface Payment {
+  id: string;
+  due_date: string;
+  description: string;
+  recipient: string;
+  value: number;
+  status: string;
+  payment_method: string;
+  recurrence: string;
+}
+
+const getStatusBadge = (status: string) => {
+  switch (status) {
+    case "completed":
+      return (
+        <Badge variant="outline" className="bg-fin-green/20 text-fin-green border-0">
+          <Check className="mr-1 h-3 w-3" /> Pago
+        </Badge>
+      );
+    case "pending":
+      return (
+        <Badge variant="outline" className="bg-amber-500/20 text-amber-500 border-0">
+          <Clock className="mr-1 h-3 w-3" /> Pendente
+        </Badge>
+      );
+    case "overdue":
+      return (
+        <Badge variant="outline" className="bg-fin-red/20 text-fin-red border-0">
+          <AlertCircle className="mr-1 h-3 w-3" /> Atrasado
+        </Badge>
+      );
+    default:
+      return null;
+  }
+};
+
+const getRecurrenceBadge = (recurrence: string) => {
+  switch (recurrence) {
+    case "Mensal":
+      return (
+        <Badge variant="outline" className="bg-blue-500/20 text-blue-500 border-0">
+          <Repeat className="mr-1 h-3 w-3" /> Mensal
+        </Badge>
+      );
+    case "Trimestral":
+      return (
+        <Badge variant="outline" className="bg-violet-500/20 text-violet-500 border-0">
+          <Repeat className="mr-1 h-3 w-3" /> Trimestral
+        </Badge>
+      );
+    case "Anual":
+      return (
+        <Badge variant="outline" className="bg-indigo-500/20 text-indigo-500 border-0">
+          <Repeat className="mr-1 h-3 w-3" /> Anual
+        </Badge>
+      );
+    case "Único":
+      return (
+        <Badge variant="outline" className="bg-gray-500/20 text-gray-500 border-0">
+          <Banknote className="mr-1 h-3 w-3" /> Único
+        </Badge>
+      );
+    default:
+      return null;
+  }
+};
 
 const Pagamentos = () => {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [loadingCategories, setLoadingCategories] = useState(true);
-  const [loadingClients, setLoadingClients] = useState(true);
-  const [loadingPayments, setLoadingPayments] = useState(true);
-  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("all");
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [isUpdateSheetOpen, setIsUpdateSheetOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const { user } = useAuth();
   
-  const fetchCategories = async () => {
-    try {
-      if (!user) return;
-      
-      setLoadingCategories(true);
-      
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('type', 'expense')
-        .order('name', { ascending: true });
-      
-      if (error) throw error;
-      
-      setCategories(data as Category[]);
-    } catch (error: any) {
-      console.error('Error fetching categories:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar as categorias",
-        variant: "destructive",
-      });
-    } finally {
-      setLoadingCategories(false);
-    }
-  };
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [dateRange, setDateRange] = useState<{
+    from: Date;
+    to: Date;
+  }>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date())
+  });
+  const [dateFilterMode, setDateFilterMode] = useState<"current" | "prev" | "next" | "custom">("current");
+  
+  const [newPayment, setNewPayment] = useState({
+    description: "",
+    recipient: "",
+    value: "",
+    due_date: "",
+    payment_method: "Transferência",
+    recurrence: "Mensal",
+    status: "pending"
+  });
+  
+  const { toast } = useToast();
 
-  const fetchClients = async () => {
-    try {
-      if (!user) return;
-      
-      setLoadingClients(true);
-      
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name', { ascending: true });
-      
-      if (error) throw error;
-      
-      setClients(data as Client[]);
-    } catch (error: any) {
-      console.error('Error fetching clients:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os clientes",
-        variant: "destructive",
-      });
-    } finally {
-      setLoadingClients(false);
+  useEffect(() => {
+    if (user) {
+      fetchPayments();
     }
-  };
+  }, [filterStatus, user, dateRange]);
+
+  useEffect(() => {
+    switch (dateFilterMode) {
+      case "current":
+        setDateRange({
+          from: startOfMonth(currentDate),
+          to: endOfMonth(currentDate)
+        });
+        break;
+      case "prev":
+        setDateRange({
+          from: startOfMonth(subMonths(currentDate, 1)),
+          to: endOfMonth(subMonths(currentDate, 1))
+        });
+        break;
+      case "next":
+        setDateRange({
+          from: startOfMonth(addMonths(currentDate, 1)),
+          to: endOfMonth(addMonths(currentDate, 1))
+        });
+        break;
+    }
+  }, [dateFilterMode, currentDate]);
 
   const fetchPayments = async () => {
     try {
       if (!user) return;
       
-      setLoadingPayments(true);
+      setLoading(true);
       
-      const { data, error } = await supabase
+      let query = supabase
         .from('payments')
         .select('*')
         .eq('user_id', user.id)
         .order('due_date', { ascending: true });
       
+      if (filterStatus) {
+        query = query.eq('status', filterStatus);
+      }
+      
+      const { data, error } = await query;
+      
       if (error) throw error;
       
-      setPayments(data as Payment[]);
+      if (!data) {
+        setPayments([]);
+        return;
+      }
+      
+      const formattedPayments = data.map((item) => ({
+        id: item.id,
+        due_date: format(new Date(item.due_date), 'dd/MM/yyyy'),
+        description: item.description,
+        recipient: item.recipient,
+        value: Number(item.value),
+        status: item.status,
+        payment_method: item.payment_method,
+        recurrence: item.recurrence
+      }));
+      
+      const filteredByDate = formattedPayments.filter(payment => {
+        const paymentDate = parseISO(payment.due_date.split('/').reverse().join('-'));
+        return isWithinInterval(paymentDate, {
+          start: dateRange.from,
+          end: dateRange.to
+        });
+      });
+      
+      setPayments(filteredByDate);
     } catch (error: any) {
       console.error('Error fetching payments:', error);
       toast({
-        title: "Erro",
-        description: "Não foi possível carregar os pagamentos",
-        variant: "destructive",
+        title: "Erro ao carregar pagamentos",
+        description: error.message,
+        variant: "destructive"
       });
     } finally {
-      setLoadingPayments(false);
+      setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchCategories();
-    fetchClients();
-    fetchPayments();
-  }, [user]);
-
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Pagamentos</h1>
-      <div className="grid gap-6">
-        {loadingPayments ? (
-          <div>Carregando pagamentos...</div>
-        ) : payments.length === 0 ? (
-          <div>Nenhum pagamento encontrado.</div>
-        ) : (
-          <div className="space-y-4">
-            {/* Aqui você pode implementar o componente de lista de pagamentos */}
-            {payments.map((payment) => (
-              <div 
-                key={payment.id} 
-                className="p-4 bg-card rounded-lg border shadow-sm"
-              >
-                <div className="flex justify-between">
-                  <div>
-                    <h3 className="font-medium">{payment.description}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Destinatário: {payment.recipient}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Vencimento: {new Date(payment.due_date).toLocaleDateString('pt-BR')}
-                    </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Pagamentos</h1>
+          <p className="text-muted-foreground">
+            Gerencie seus pagamentos e contas a pagar.
+          </p>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+          <Button 
+            className="w-full sm:w-auto" 
+            onClick={() => setIsDialogOpen(true)}
+          >
+            <Plus className="mr-2 h-4 w-4" /> Novo Pagamento
+          </Button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full sm:w-auto">
+                <Download className="mr-2 h-4 w-4" />
+                Exportar
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem>
+                Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+      
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <DateFilter 
+            dateRange={dateRange}
+            dateFilterMode={dateFilterMode}
+            onPrevMonth={() => setDateFilterMode("prev")}
+            onNextMonth={() => setDateFilterMode("next")}
+            onCurrentMonth={() => setDateFilterMode("current")}
+            onDateRangeChange={(range) => {
+              setDateRange(range);
+              setDateFilterMode("custom");
+            }}
+          />
+        </div>
+        
+        <div className="flex gap-2 w-full md:w-auto">
+          <div className="relative flex-1 md:flex-auto">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Buscar pagamentos..."
+              className="pl-8 w-full md:w-[250px]"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-1">
+                <Filter className="h-4 w-4" />
+                <span className="hidden sm:inline">Filtrar</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setFilterStatus(null)}>
+                Todos
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterStatus("pending")}>
+                Pendentes
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterStatus("completed")}>
+                Pagos
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterStatus("overdue")}>
+                Atrasados
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
+          <Button
+            variant="outline"
+            className="aspect-square p-2"
+            onClick={() => setViewMode(viewMode === "list" ? "calendar" : "list")}
+            title={viewMode === "list" ? "Visualizar como calendário" : "Visualizar como lista"}
+          >
+            {viewMode === "list" ? <CalendarDays className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
+          </Button>
+        </div>
+      </div>
+      
+      <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="all">Todos</TabsTrigger>
+          <TabsTrigger value="pending">Pendentes</TabsTrigger>
+          <TabsTrigger value="overdue">Atrasados</TabsTrigger>
+          <TabsTrigger value="completed">Pagos</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="all" className="space-y-4">
+          {viewMode === "list" ? (
+            <Card>
+              <CardContent className="p-0">
+                {loading ? (
+                  <div className="flex justify-center items-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
                   </div>
-                  <div className="font-semibold">
-                    {new Intl.NumberFormat('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL'
-                    }).format(payment.value)}
+                ) : payments.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">Nenhum pagamento encontrado.</p>
                   </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Destinatário</TableHead>
+                        <TableHead>Vencimento</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Recorrência</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {payments
+                        .filter(payment => {
+                          if (activeTab !== "all") {
+                            return payment.status === activeTab;
+                          }
+                          return payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                 payment.recipient.toLowerCase().includes(searchTerm.toLowerCase());
+                        })
+                        .map(payment => (
+                          <TableRow key={payment.id}>
+                            <TableCell className="font-medium">{payment.description}</TableCell>
+                            <TableCell>{payment.recipient}</TableCell>
+                            <TableCell>{payment.due_date}</TableCell>
+                            <TableCell>
+                              {payment.value.toLocaleString('pt-BR', { 
+                                style: 'currency', 
+                                currency: 'BRL' 
+                              })}
+                            </TableCell>
+                            <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                            <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setSelectedPayment(payment);
+                                  setIsUpdateSheetOpen(true);
+                                }}
+                              >
+                                <ArrowRight className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <PaymentCalendarView 
+              payments={payments.filter(payment => {
+                if (activeTab !== "all") {
+                  return payment.status === activeTab;
+                }
+                return payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                       payment.recipient.toLowerCase().includes(searchTerm.toLowerCase());
+              })} 
+              currentDate={currentDate} 
+            />
+          )}
+        </TabsContent>
+        
+        <TabsContent value="pending" className="space-y-4">
+          {/* Similar content as "all" tab but filtered for pending */}
+        </TabsContent>
+        
+        <TabsContent value="overdue" className="space-y-4">
+          {/* Similar content as "all" tab but filtered for overdue */}
+        </TabsContent>
+        
+        <TabsContent value="completed" className="space-y-4">
+          {/* Similar content as "all" tab but filtered for completed */}
+        </TabsContent>
+      </Tabs>
+      
+      {/* Add Payment Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adicionar Pagamento</DialogTitle>
+            <DialogDescription>
+              Adicione um novo pagamento para controlar suas finanças.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="description">Descrição</Label>
+              <Input
+                id="description"
+                value={newPayment.description}
+                onChange={(e) => setNewPayment({...newPayment, description: e.target.value})}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="recipient">Destinatário</Label>
+              <Input
+                id="recipient"
+                value={newPayment.recipient}
+                onChange={(e) => setNewPayment({...newPayment, recipient: e.target.value})}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="value">Valor</Label>
+                <Input
+                  id="value"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newPayment.value}
+                  onChange={(e) => setNewPayment({...newPayment, value: e.target.value})}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="due_date">Data de Vencimento</Label>
+                <Input
+                  id="due_date"
+                  type="date"
+                  value={newPayment.due_date}
+                  onChange={(e) => setNewPayment({...newPayment, due_date: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="payment_method">Método de Pagamento</Label>
+                <select
+                  id="payment_method"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={newPayment.payment_method}
+                  onChange={(e) => setNewPayment({...newPayment, payment_method: e.target.value})}
+                >
+                  <option value="Transferência">Transferência</option>
+                  <option value="Cartão de Crédito">Cartão de Crédito</option>
+                  <option value="Boleto">Boleto</option>
+                  <option value="Dinheiro">Dinheiro</option>
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="recurrence">Recorrência</Label>
+                <select
+                  id="recurrence"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={newPayment.recurrence}
+                  onChange={(e) => setNewPayment({...newPayment, recurrence: e.target.value})}
+                >
+                  <option value="Único">Único</option>
+                  <option value="Mensal">Mensal</option>
+                  <option value="Trimestral">Trimestral</option>
+                  <option value="Anual">Anual</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" onClick={async () => {
+              try {
+                if (!user) return;
+                
+                if (!newPayment.description || !newPayment.recipient || !newPayment.value || !newPayment.due_date) {
+                  toast({
+                    title: "Campos obrigatórios",
+                    description: "Preencha todos os campos para continuar.",
+                    variant: "destructive"
+                  });
+                  return;
+                }
+                
+                const { error } = await supabase
+                  .from('payments')
+                  .insert({
+                    user_id: user.id,
+                    description: newPayment.description,
+                    recipient: newPayment.recipient,
+                    value: parseFloat(newPayment.value),
+                    due_date: newPayment.due_date,
+                    payment_method: newPayment.payment_method,
+                    recurrence: newPayment.recurrence,
+                    status: newPayment.status
+                  });
+                
+                if (error) throw error;
+                
+                toast({
+                  title: "Pagamento adicionado",
+                  description: "O pagamento foi adicionado com sucesso.",
+                });
+                
+                setNewPayment({
+                  description: "",
+                  recipient: "",
+                  value: "",
+                  due_date: "",
+                  payment_method: "Transferência",
+                  recurrence: "Mensal",
+                  status: "pending"
+                });
+                
+                setIsDialogOpen(false);
+                fetchPayments();
+              } catch (error: any) {
+                console.error('Error adding payment:', error);
+                toast({
+                  title: "Erro ao adicionar pagamento",
+                  description: error.message,
+                  variant: "destructive"
+                });
+              }
+            }}>
+              Adicionar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Update Payment Sheet */}
+      <Sheet open={isUpdateSheetOpen && selectedPayment !== null} onOpenChange={setIsUpdateSheetOpen}>
+        <SheetContent className="sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Detalhes do Pagamento</SheetTitle>
+            <SheetDescription>
+              Visualize e atualize os detalhes do pagamento.
+            </SheetDescription>
+          </SheetHeader>
+          {selectedPayment && (
+            <div className="space-y-4 py-4">
+              <div className="grid gap-2">
+                <Label>Descrição</Label>
+                <Input
+                  value={selectedPayment.description}
+                  onChange={(e) => setSelectedPayment({...selectedPayment, description: e.target.value})}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Destinatário</Label>
+                <Input
+                  value={selectedPayment.recipient}
+                  onChange={(e) => setSelectedPayment({...selectedPayment, recipient: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Valor</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={selectedPayment.value}
+                    onChange={(e) => setSelectedPayment({...selectedPayment, value: parseFloat(e.target.value)})}
+                  />
                 </div>
-                <div className="mt-2 flex gap-2">
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    payment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                    payment.status === 'paid' ? 'bg-green-100 text-green-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {payment.status === 'pending' ? 'Pendente' :
-                     payment.status === 'paid' ? 'Pago' : 'Atrasado'}
-                  </span>
-                  <span className="text-xs px-2 py-1 rounded-full bg-secondary">
-                    {payment.payment_method}
-                  </span>
+                <div className="grid gap-2">
+                  <Label>Data de Vencimento</Label>
+                  <Input
+                    type="text"
+                    value={selectedPayment.due_date}
+                    readOnly
+                  />
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+              <div className="grid gap-2">
+                <Label>Status</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={selectedPayment.status}
+                  onChange={(e) => setSelectedPayment({...selectedPayment, status: e.target.value})}
+                >
+                  <option value="pending">Pendente</option>
+                  <option value="completed">Pago</option>
+                  <option value="overdue">Atrasado</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Método de Pagamento</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={selectedPayment.payment_method}
+                    onChange={(e) => setSelectedPayment({...selectedPayment, payment_method: e.target.value})}
+                  >
+                    <option value="Transferência">Transferência</option>
+                    <option value="Cartão de Crédito">Cartão de Crédito</option>
+                    <option value="Boleto">Boleto</option>
+                    <option value="Dinheiro">Dinheiro</option>
+                  </select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Recorrência</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={selectedPayment.recurrence}
+                    onChange={(e) => setSelectedPayment({...selectedPayment, recurrence: e.target.value})}
+                  >
+                    <option value="Único">Único</option>
+                    <option value="Mensal">Mensal</option>
+                    <option value="Trimestral">Trimestral</option>
+                    <option value="Anual">Anual</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-between pt-4">
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    try {
+                      if (!user || !selectedPayment) return;
+                      
+                      const { error } = await supabase
+                        .from('payments')
+                        .delete()
+                        .eq('id', selectedPayment.id);
+                      
+                      if (error) throw error;
+                      
+                      toast({
+                        title: "Pagamento excluído",
+                        description: "O pagamento foi excluído com sucesso.",
+                      });
+                      
+                      setIsUpdateSheetOpen(false);
+                      fetchPayments();
+                    } catch (error: any) {
+                      toast({
+                        title: "Erro ao excluir pagamento",
+                        description: error.message,
+                        variant: "destructive"
+                      });
+                    }
+                  }}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                </Button>
+                <Button
+                  onClick={async () => {
+                    try {
+                      if (!user || !selectedPayment) return;
+                      
+                      // Get the previous status to check if it was changed to completed
+                      const { data: previousData } = await supabase
+                        .from('payments')
+                        .select('status')
+                        .eq('id', selectedPayment.id)
+                        .single();
+                      
+                      // Update the payment
+                      const { error } = await supabase
+                        .from('payments')
+                        .update({
+                          description: selectedPayment.description,
+                          recipient: selectedPayment.recipient,
+                          value: selectedPayment.value,
+                          status: selectedPayment.status,
+                          payment_method: selectedPayment.payment_method,
+                          recurrence: selectedPayment.recurrence
+                        })
+                        .eq('id', selectedPayment.id);
+                      
+                      if (error) throw error;
+                      
+                      // If the status was changed to completed, create a transaction
+                      if (previousData && previousData.status !== 'completed' && selectedPayment.status === 'completed') {
+                        const { error: transactionError } = await supabase
+                          .from('transactions')
+                          .insert({
+                            user_id: user.id,
+                            description: `Pagamento: ${selectedPayment.description}`,
+                            category: 'Pagamentos',
+                            value: selectedPayment.value,
+                            type: 'expense',
+                            date: new Date().toISOString(),
+                            status: 'completed'
+                          });
+                        
+                        if (transactionError) throw transactionError;
+                      }
+                      
+                      toast({
+                        title: "Pagamento atualizado",
+                        description: "O pagamento foi atualizado com sucesso.",
+                      });
+                      
+                      setIsUpdateSheetOpen(false);
+                      fetchPayments();
+                    } catch (error: any) {
+                      toast({
+                        title: "Erro ao atualizar pagamento",
+                        description: error.message,
+                        variant: "destructive"
+                      });
+                    }
+                  }}
+                >
+                  Salvar alterações
+                </Button>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
