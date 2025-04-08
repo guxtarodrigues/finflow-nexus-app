@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { 
   Users, 
@@ -10,7 +11,9 @@ import {
   CircleDollarSign,
   Info,
   XCircle,
-  CheckCircle
+  CheckCircle,
+  ArrowUp,
+  Clock
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,7 +50,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, startOfMonth, endOfMonth } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -56,15 +59,17 @@ import { Client, NewClient } from "@/types/clients";
 import { ClientTransactionsList } from "@/components/clients/ClientTransactionsList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClientCard } from "@/components/clients/ClientCard";
+import { MetricCard } from "@/components/dashboard/MetricCard";
 
 const Clientes = () => {
   const [clients, setClients] = useState<Client[]>([]);
+  const [paidClients, setPaidClients] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [totalClients, setTotalClients] = useState(0);
+  const [viewMode, setViewMode] = useState<"all" | "monthly">("all");
   const { user } = useAuth();
   const { toast } = useToast();
   
@@ -86,6 +91,7 @@ const Clientes = () => {
   useEffect(() => {
     if (user) {
       fetchClients();
+      fetchPaidClientsThisMonth();
     }
   }, [user]);
   
@@ -105,7 +111,6 @@ const Clientes = () => {
       
       if (data) {
         setClients(data as Client[]);
-        setTotalClients(data.length);
       }
     } catch (error: any) {
       console.error('Error fetching clients:', error);
@@ -116,6 +121,34 @@ const Clientes = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const fetchPaidClientsThisMonth = async () => {
+    try {
+      if (!user) return;
+      
+      const now = new Date();
+      const startDate = startOfMonth(now).toISOString();
+      const endDate = endOfMonth(now).toISOString();
+      
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('client_id')
+        .eq('user_id', user.id)
+        .eq('type', 'income')
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .not('client_id', 'is', null);
+      
+      if (error) throw error;
+      
+      if (data) {
+        const paidClientIds = data.map(transaction => transaction.client_id).filter(Boolean);
+        setPaidClients(paidClientIds);
+      }
+    } catch (error: any) {
+      console.error('Error fetching paid clients:', error);
     }
   };
   
@@ -243,23 +276,47 @@ const Clientes = () => {
     });
   };
   
-  const getStatusColor = (status: string | null) => {
-    if (status === 'active') return "text-green-500";
-    if (status === 'inactive') return "text-red-500";
-    return "text-gray-500";
+  const handleStatusChange = () => {
+    fetchClients();
+    fetchPaidClientsThisMonth();
   };
   
-  const getStatusIcon = (status: string | null) => {
-    if (status === 'active') return <CheckCircle className="h-4 w-4 text-green-500" />;
-    if (status === 'inactive') return <XCircle className="h-4 w-4 text-red-500" />;
-    return null;
+  const getFilteredClients = () => {
+    const filtered = clients.filter(client => 
+      client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (client.email && client.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (client.phone && client.phone.includes(searchTerm))
+    );
+    
+    if (viewMode === "monthly") {
+      const activeClients = filtered.filter(client => client.status === 'active' && client.monthly_value);
+      const paidThisMonth = activeClients.filter(client => paidClients.includes(client.id));
+      const pendingThisMonth = activeClients.filter(client => !paidClients.includes(client.id));
+      
+      return [...paidThisMonth, ...pendingThisMonth];
+    }
+    
+    return filtered;
   };
   
-  const filteredClients = clients.filter(client => 
-    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (client.email && client.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (client.phone && client.phone.includes(searchTerm))
-  );
+  const filteredClients = getFilteredClients();
+  
+  // Calculate metrics
+  const monthlyRevenue = clients
+    .filter(client => client.status === 'active')
+    .reduce((sum, client) => sum + (client.monthly_value || 0), 0);
+  
+  const yearlyRevenue = monthlyRevenue * 12;
+  
+  const activeClientsCount = clients.filter(client => client.status === 'active').length;
+  
+  const paidClientsThisMonth = filteredClients.filter(client => 
+    client.status === 'active' && paidClients.includes(client.id)
+  ).length;
+  
+  const pendingClientsThisMonth = filteredClients.filter(client => 
+    client.status === 'active' && !paidClients.includes(client.id)
+  ).length;
   
   return (
     <div className="space-y-6">
@@ -276,95 +333,176 @@ const Clientes = () => {
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-normal">Total de Clientes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div className="text-2xl font-bold">{totalClients}</div>
-              <Users className="h-8 w-8 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-normal">Receita Mensal</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div className="text-2xl font-bold">
-                {formatCurrency(
-                  clients
-                    .filter(client => client.status === 'active')
-                    .reduce((sum, client) => sum + (client.monthly_value || 0), 0)
-                )}
-              </div>
-              <CircleDollarSign className="h-8 w-8 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-normal">Clientes Ativos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div className="text-2xl font-bold">
-                {clients.filter(client => client.status === 'active').length}
-              </div>
-              <CheckCircle className="h-8 w-8 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
+        {/* Monthly Revenue */}
+        <MetricCard
+          title="Receita Mensal"
+          value={formatCurrency(monthlyRevenue)}
+          subtitle="de clientes ativos"
+          icon="income"
+        />
+        
+        {/* Yearly Revenue */}
+        <MetricCard
+          title="Receita Anual"
+          value={formatCurrency(yearlyRevenue)}
+          subtitle="projeção para 12 meses"
+          icon="savings"
+        />
+        
+        {/* Active Clients */}
+        <MetricCard
+          title="Clientes Ativos"
+          value={activeClientsCount.toString()}
+          subtitle="com contratos em vigor"
+          icon="money"
+        />
       </div>
       
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-lg font-normal flex items-center">
             <Users className="mr-2 h-5 w-5 text-fin-green" />
-            Todos os Clientes
+            Clientes
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            <div className="flex justify-between items-center flex-wrap gap-2">
-              <div className="relative w-full max-w-sm">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Buscar clientes..."
-                  className="pl-8 bg-[#1F1F23] border-[#2A2A2E]"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
-            
-            {loading ? (
-              <div className="flex justify-center items-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : filteredClients.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">Nenhum cliente encontrado.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredClients.map((client) => (
-                  <ClientCard 
-                    key={client.id}
-                    client={client}
-                    onEdit={(client) => {
-                      setSelectedClient(client);
-                      setIsEditSheetOpen(true);
-                    }}
-                    onDelete={handleDeleteClient}
-                    onStatusChange={fetchClients}
+            <Tabs defaultValue="all" className="w-full" onValueChange={(value) => setViewMode(value as "all" | "monthly")}>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                <TabsList className="mb-2 sm:mb-0">
+                  <TabsTrigger value="all">Todos os Clientes</TabsTrigger>
+                  <TabsTrigger value="monthly">Balanço Mensal</TabsTrigger>
+                </TabsList>
+                
+                <div className="relative w-full max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Buscar clientes..."
+                    className="pl-8 bg-[#1F1F23] border-[#2A2A2E]"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                   />
-                ))}
+                </div>
               </div>
-            )}
+              
+              <TabsContent value="all" className="mt-0">
+                {loading ? (
+                  <div className="flex justify-center items-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : filteredClients.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">Nenhum cliente encontrado.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredClients.map((client) => (
+                      <ClientCard 
+                        key={client.id}
+                        client={client}
+                        onEdit={(client) => {
+                          setSelectedClient(client);
+                          setIsEditSheetOpen(true);
+                        }}
+                        onDelete={handleDeleteClient}
+                        onStatusChange={handleStatusChange}
+                      />
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+              
+              <TabsContent value="monthly" className="mt-0">
+                <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Card className="bg-[#1F1F23] border-[#2A2A2E]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-md font-normal flex items-center">
+                        <CheckCircle className="mr-2 h-4 w-4 text-fin-green" />
+                        Clientes Pagos
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{paidClientsThisMonth}</div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card className="bg-[#1F1F23] border-[#2A2A2E]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-md font-normal flex items-center">
+                        <Clock className="mr-2 h-4 w-4 text-amber-500" />
+                        Clientes Pendentes
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{pendingClientsThisMonth}</div>
+                    </CardContent>
+                  </Card>
+                </div>
+                
+                {loading ? (
+                  <div className="flex justify-center items-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : filteredClients.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">Nenhum cliente encontrado.</p>
+                  </div>
+                ) : (
+                  <>
+                    {paidClientsThisMonth > 0 && (
+                      <>
+                        <h3 className="text-md font-medium mb-3 flex items-center">
+                          <CheckCircle className="mr-2 h-4 w-4 text-fin-green" />
+                          Pagamentos Recebidos este Mês
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                          {filteredClients
+                            .filter(client => client.status === 'active' && paidClients.includes(client.id))
+                            .map((client) => (
+                              <ClientCard 
+                                key={client.id}
+                                client={client}
+                                onEdit={(client) => {
+                                  setSelectedClient(client);
+                                  setIsEditSheetOpen(true);
+                                }}
+                                onDelete={handleDeleteClient}
+                                onStatusChange={handleStatusChange}
+                              />
+                            ))}
+                        </div>
+                      </>
+                    )}
+                    
+                    {pendingClientsThisMonth > 0 && (
+                      <>
+                        <h3 className="text-md font-medium mb-3 flex items-center">
+                          <Clock className="mr-2 h-4 w-4 text-amber-500" />
+                          Pagamentos Pendentes
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {filteredClients
+                            .filter(client => client.status === 'active' && !paidClients.includes(client.id))
+                            .map((client) => (
+                              <ClientCard 
+                                key={client.id}
+                                client={client}
+                                onEdit={(client) => {
+                                  setSelectedClient(client);
+                                  setIsEditSheetOpen(true);
+                                }}
+                                onDelete={handleDeleteClient}
+                                onStatusChange={handleStatusChange}
+                              />
+                            ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
         </CardContent>
       </Card>
