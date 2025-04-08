@@ -14,6 +14,7 @@ import { Loader2, Check, RefreshCcw } from "lucide-react";
 import { format, addMonths, parseISO, isAfter, isBefore } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Transaction {
   id: string;
@@ -36,6 +37,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const fetchTransactions = async () => {
     try {
@@ -218,6 +220,11 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
         const dateParts = transaction.date.split('/');
         const isoDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
         
+        // Check if user is available
+        if (!user || !user.id) {
+          throw new Error("Usuário não autenticado");
+        }
+        
         // Insert a new transaction record for this contract payment
         const { data: newTransaction, error: insertError } = await supabase
           .from('transactions')
@@ -228,7 +235,8 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             category: transaction.category,
             type: 'income',
             status: 'completed',
-            client_id: clientId
+            client_id: clientId,
+            user_id: user.id // Add the user_id field that was missing
           })
           .select()
           .single();
