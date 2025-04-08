@@ -50,7 +50,7 @@ interface Receipt {
   date: string;
   description: string;
   category: string;
-  category_id: string; // Added to fix type error
+  category_id: string;
   value: number;
   status: string;
   client_id?: string;
