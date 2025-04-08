@@ -11,6 +11,15 @@ import { useNavigate } from "react-router-dom";
 import { startOfMonth, endOfMonth, format, addMonths } from "date-fns";
 import { Client } from "@/types/clients";
 
+// Define a more specific type for payments to avoid deep instantiation
+interface Payment {
+  id: string;
+  description: string;
+  due_date: string;
+  recipient: string;
+  value: number;
+}
+
 // Define specific type for financial data to avoid deep instantiation
 interface FinancialData {
   totalBalance: number;
@@ -21,7 +30,7 @@ interface FinancialData {
   nextMonthForecast: number;
   activeClients: number;
   taxPayable: number;
-  upcomingPayments: Array<any>; // Using a more specific type here if possible
+  upcomingPayments: Payment[];
   clientsIncome: number;
 }
 

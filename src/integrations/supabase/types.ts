@@ -41,29 +41,47 @@ export type Database = {
       }
       clients: {
         Row: {
+          contract_end: string | null
+          contract_start: string | null
           created_at: string
+          description: string | null
           email: string | null
           id: string
+          monthly_value: number | null
           name: string
           phone: string | null
+          recurring_payment: boolean | null
+          status: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          contract_end?: string | null
+          contract_start?: string | null
           created_at?: string
+          description?: string | null
           email?: string | null
           id?: string
+          monthly_value?: number | null
           name: string
           phone?: string | null
+          recurring_payment?: boolean | null
+          status?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          contract_end?: string | null
+          contract_start?: string | null
           created_at?: string
+          description?: string | null
           email?: string | null
           id?: string
+          monthly_value?: number | null
           name?: string
           phone?: string | null
+          recurring_payment?: boolean | null
+          status?: string | null
           updated_at?: string
           user_id?: string
         }
