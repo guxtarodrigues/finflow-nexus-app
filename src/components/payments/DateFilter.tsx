@@ -61,7 +61,10 @@ export const DateFilter = ({
           <Calendar
             mode="range"
             defaultMonth={dateRange.from}
-            selected={dateRange}
+            selected={{
+              from: dateRange.from,
+              to: dateRange.to
+            }}
             onSelect={(value) => {
               if (value?.from && value?.to) {
                 onDateRangeChange({
