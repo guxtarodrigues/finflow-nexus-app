@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, TrendingUp, Calendar, DollarSign, PercentIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,13 +21,13 @@ const Investimentos = () => {
   const [loading, setLoading] = useState(true);
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
   
-  const [newInvestment, setNewInvestment] = useState({
+  const [newInvestment, setNewInvestment] = useState<Omit<Investment, 'id'> & {id?: string}>({
     name: "",
     amount: 0,
     return_rate: 0,
     start_date: format(new Date(), "yyyy-MM-dd"),
     end_date: "",
-    status: "active" as "active" | "completed" | "cancelled"
+    status: "active"
   });
   
   const { toast } = useToast();
@@ -54,7 +53,7 @@ const Investimentos = () => {
       
       if (error) throw error;
       
-      setInvestments(data || []);
+      setInvestments((data || []) as Investment[]);
     } catch (error: any) {
       console.error('Error fetching investments:', error);
       toast({

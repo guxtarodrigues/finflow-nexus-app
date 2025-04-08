@@ -3,7 +3,7 @@ export interface Category {
   id: string;
   name: string;
   type: "income" | "expense" | "investment";
-  color?: string;
+  color?: string | null;
   created_at?: string;
   updated_at?: string;
   user_id?: string;
@@ -12,8 +12,8 @@ export interface Category {
 export interface Client {
   id: string;
   name: string;
-  email?: string;
-  phone?: string;
+  email?: string | null;
+  phone?: string | null;
   created_at?: string;
   updated_at?: string;
   user_id?: string;
@@ -25,7 +25,7 @@ export interface Investment {
   amount: number;
   return_rate: number;
   start_date: string;
-  end_date?: string;
+  end_date?: string | null;
   status: "active" | "completed" | "cancelled";
   created_at?: string;
   updated_at?: string;
@@ -39,7 +39,7 @@ export interface Transaction {
   type: "income" | "expense";
   date: string;
   category: string;
-  category_id?: string;
+  category_id?: string | null;
   status: string;
   created_at?: string;
   updated_at?: string;
@@ -55,8 +55,8 @@ export interface Payment {
   payment_method: string;
   recurrence: string;
   status: string;
-  category_id?: string;
-  client_id?: string;
+  category_id?: string | null;
+  client_id?: string | null;
   created_at?: string;
   updated_at?: string;
   user_id?: string;

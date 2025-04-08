@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, Palette } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,9 +18,9 @@ const Categorias = () => {
   const [loading, setLoading] = useState(true);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   
-  const [newCategory, setNewCategory] = useState({
+  const [newCategory, setNewCategory] = useState<Omit<Category, 'id'> & {id?: string}>({
     name: "",
-    type: "expense" as "income" | "expense" | "investment",
+    type: "expense",
     color: "#6E59A5"
   });
   
@@ -54,7 +53,7 @@ const Categorias = () => {
       
       if (error) throw error;
       
-      setCategories(data || []);
+      setCategories((data || []) as Category[]);
     } catch (error: any) {
       console.error('Error fetching categories:', error);
       toast({
