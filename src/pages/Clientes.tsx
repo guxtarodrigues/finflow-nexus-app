@@ -3,8 +3,6 @@ import {
   Users, 
   Search, 
   Plus, 
-  Edit2, 
-  Trash2, 
   Loader2,
   Mail,
   Phone,
@@ -43,14 +41,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { 
   Popover,
   PopoverContent,
@@ -65,6 +55,7 @@ import { Label } from "@/components/ui/label";
 import { Client, NewClient } from "@/types/clients";
 import { ClientTransactionsList } from "@/components/clients/ClientTransactionsList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ClientCard } from "@/components/clients/ClientCard";
 
 const Clientes = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -336,7 +327,7 @@ const Clientes = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="flex justify-between items-center flex-wrap gap-2">
               <div className="relative w-full max-w-sm">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -359,90 +350,20 @@ const Clientes = () => {
                 <p className="text-muted-foreground">Nenhum cliente encontrado.</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Contato</TableHead>
-                    <TableHead>Contrato</TableHead>
-                    <TableHead>Valor Mensal</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredClients.map((client) => (
-                    <TableRow key={client.id}>
-                      <TableCell className="font-medium">{client.name}</TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          {client.email && (
-                            <div className="flex items-center gap-1 text-sm">
-                              <Mail className="h-3 w-3 text-muted-foreground" />
-                              {client.email}
-                            </div>
-                          )}
-                          {client.phone && (
-                            <div className="flex items-center gap-1 text-sm">
-                              <Phone className="h-3 w-3 text-muted-foreground" />
-                              {client.phone}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {client.contract_start ? (
-                          <div className="flex items-center gap-1 text-sm">
-                            <Calendar className="h-3 w-3 text-muted-foreground" />
-                            {format(new Date(client.contract_start), 'dd/MM/yyyy')}
-                            {client.contract_end && ` até ${format(new Date(client.contract_end), 'dd/MM/yyyy')}`}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">Não informado</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {client.monthly_value ? (
-                          <div className="flex items-center gap-1">
-                            <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
-                            {formatCurrency(client.monthly_value)}
-                            {client.recurring_payment && <span className="text-xs text-fin-green ml-1">(Recorrente)</span>}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">Não informado</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className={`flex items-center gap-1 ${getStatusColor(client.status)}`}>
-                          {getStatusIcon(client.status)}
-                          <span>{client.status === 'active' ? 'Ativo' : 'Inativo'}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setSelectedClient(client);
-                              setIsEditSheetOpen(true);
-                            }}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteClient(client.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredClients.map((client) => (
+                  <ClientCard 
+                    key={client.id}
+                    client={client}
+                    onEdit={(client) => {
+                      setSelectedClient(client);
+                      setIsEditSheetOpen(true);
+                    }}
+                    onDelete={handleDeleteClient}
+                    onStatusChange={fetchClients}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </CardContent>
