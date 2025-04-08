@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   CreditCard, 
@@ -15,7 +14,8 @@ import {
   Loader2,
   Repeat,
   Banknote,
-  ArrowRight
+  ArrowRight,
+  LayoutGrid
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,10 +39,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, addMonths, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { PaymentCalendarView } from "@/components/payments/PaymentCalendarView";
+import { DateFilter } from "@/components/payments/DateFilter";
 
 interface Payment {
   id: string;
@@ -120,7 +122,18 @@ const Pagamentos = () => {
   const [activeTab, setActiveTab] = useState("all");
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [isUpdateSheetOpen, setIsUpdateSheetOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const { user } = useAuth();
+  
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [dateRange, setDateRange] = useState<{
+    from: Date;
+    to: Date;
+  }>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date())
+  });
+  const [dateFilterMode, setDateFilterMode] = useState<"current" | "prev" | "next" | "custom">("current");
   
   const [newPayment, setNewPayment] = useState({
     description: "",
@@ -138,7 +151,30 @@ const Pagamentos = () => {
     if (user) {
       fetchPayments();
     }
-  }, [filterStatus, user]);
+  }, [filterStatus, user, dateRange]);
+
+  useEffect(() => {
+    switch (dateFilterMode) {
+      case "current":
+        setDateRange({
+          from: startOfMonth(currentDate),
+          to: endOfMonth(currentDate)
+        });
+        break;
+      case "prev":
+        setDateRange({
+          from: startOfMonth(subMonths(currentDate, 1)),
+          to: endOfMonth(subMonths(currentDate, 1))
+        });
+        break;
+      case "next":
+        setDateRange({
+          from: startOfMonth(addMonths(currentDate, 1)),
+          to: endOfMonth(addMonths(currentDate, 1))
+        });
+        break;
+    }
+  }, [dateFilterMode, currentDate]);
 
   const fetchPayments = async () => {
     try {
@@ -176,7 +212,15 @@ const Pagamentos = () => {
         recurrence: item.recurrence
       }));
       
-      setPayments(formattedPayments);
+      const filteredByDate = formattedPayments.filter(payment => {
+        const paymentDate = parseISO(payment.due_date.split('/').reverse().join('-'));
+        return isWithinInterval(paymentDate, {
+          start: dateRange.from,
+          end: dateRange.to
+        });
+      });
+      
+      setPayments(filteredByDate);
     } catch (error: any) {
       console.error('Error fetching payments:', error);
       toast({
@@ -278,6 +322,27 @@ const Pagamentos = () => {
 
       if (error) throw error;
       
+      if (newStatus === 'completed') {
+        const { error: transactionError } = await supabase
+          .from('transactions')
+          .insert({
+            description: `Pagamento: ${payment.description}`,
+            category: payment.recipient,
+            type: 'expense',
+            value: payment.value,
+            date: new Date().toISOString(),
+            status: 'completed',
+            user_id: user?.id
+          });
+        
+        if (transactionError) throw transactionError;
+        
+        toast({
+          title: "Transação criada",
+          description: "O pagamento foi registrado como uma transação",
+        });
+      }
+      
       await fetchPayments();
       setIsUpdateSheetOpen(false);
       
@@ -295,12 +360,31 @@ const Pagamentos = () => {
     }
   };
 
+  const handlePrevMonth = () => {
+    setDateFilterMode("prev");
+    setCurrentDate(prevDate => subMonths(prevDate, 1));
+  };
+
+  const handleNextMonth = () => {
+    setDateFilterMode("next");
+    setCurrentDate(prevDate => addMonths(prevDate, 1));
+  };
+
+  const handleCurrentMonth = () => {
+    setDateFilterMode("current");
+    setCurrentDate(new Date());
+  };
+
+  const handleDateRangeChange = (range: { from: Date; to: Date }) => {
+    setDateRange(range);
+    setDateFilterMode("custom");
+  };
+
   const filteredPayments = payments.filter(payment => 
     payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
     payment.recipient.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Group payments by recurrence type
   const recurringPayments = filteredPayments.filter(payment => 
     payment.recurrence !== "Único"
   );
@@ -317,6 +401,27 @@ const Pagamentos = () => {
         return uniquePayments;
       default:
         return filteredPayments;
+    }
+  };
+
+  const getPaymentsForDate = (date: Date) => {
+    return filteredPayments.filter(payment => {
+      const paymentDate = parseISO(payment.due_date.split('/').reverse().join('-'));
+      return paymentDate.getDate() === date.getDate() && 
+             paymentDate.getMonth() === date.getMonth() && 
+             paymentDate.getFullYear() === date.getFullYear();
+    });
+  };
+
+  const formatDateRange = () => {
+    if (dateFilterMode === "current") {
+      return `${format(dateRange.from, 'MMMM yyyy')}`;
+    } else if (dateFilterMode === "prev") {
+      return `${format(dateRange.from, 'MMMM yyyy')}`;
+    } else if (dateFilterMode === "next") {
+      return `${format(dateRange.from, 'MMMM yyyy')}`;
+    } else {
+      return `${format(dateRange.from, 'dd/MM/yyyy')} - ${format(dateRange.to, 'dd/MM/yyyy')}`;
     }
   };
 
@@ -445,7 +550,7 @@ const Pagamentos = () => {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col space-y-4">
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center flex-wrap gap-2">
                 <div className="relative w-full max-w-sm">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -457,7 +562,33 @@ const Pagamentos = () => {
                   />
                 </div>
                 
-                <div className="flex space-x-2">
+                <div className="flex flex-wrap gap-2 items-center">
+                  <DateFilter 
+                    dateRange={dateRange}
+                    dateFilterMode={dateFilterMode}
+                    onPrevMonth={handlePrevMonth}
+                    onNextMonth={handleNextMonth}
+                    onCurrentMonth={handleCurrentMonth}
+                    onDateRangeChange={handleDateRangeChange}
+                  />
+                  
+                  <div className="flex border border-[#2A2A2E] rounded-md overflow-hidden">
+                    <Button 
+                      variant="ghost" 
+                      className={`rounded-none ${viewMode === "list" ? "bg-[#2A2A2E]" : ""}`}
+                      onClick={() => setViewMode("list")}
+                    >
+                      <CreditCard className="h-4 w-4 mr-2" /> Lista
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      className={`rounded-none ${viewMode === "calendar" ? "bg-[#2A2A2E]" : ""}`}
+                      onClick={() => setViewMode("calendar")}
+                    >
+                      <CalendarDays className="h-4 w-4 mr-2" /> Calendário
+                    </Button>
+                  </div>
+                  
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" className="border-[#2A2A2E] bg-[#1F1F23]">
@@ -487,155 +618,162 @@ const Pagamentos = () => {
                 </div>
               </div>
               
-              <Tabs 
-                defaultValue="all" 
-                value={activeTab} 
-                onValueChange={setActiveTab}
-                className="w-full"
-              >
-                <TabsList className="bg-[#1F1F23] mb-4">
-                  <TabsTrigger value="all">Todos os Pagamentos</TabsTrigger>
-                  <TabsTrigger value="recurring">Pagamentos Recorrentes</TabsTrigger>
-                  <TabsTrigger value="unique">Pagamentos Únicos</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value={activeTab} className="mt-0">
-                  <div className="rounded-md border border-[#2A2A2E]">
-                    <Table>
-                      <TableHeader className="bg-[#1F1F23]">
-                        <TableRow className="hover:bg-[#2A2A2E] border-[#2A2A2E]">
-                          <TableHead className="w-[100px]">Vencimento</TableHead>
-                          <TableHead>Descrição</TableHead>
-                          <TableHead>Destinatário</TableHead>
-                          <TableHead>Recorrência</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Valor</TableHead>
-                          <TableHead className="text-right">Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {loading ? (
-                          <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center">
-                              <div className="flex justify-center items-center">
-                                <Loader2 className="h-6 w-6 text-fin-green animate-spin mr-2" />
-                                <span>Carregando pagamentos...</span>
-                              </div>
-                            </TableCell>
+              {viewMode === "list" ? (
+                <Tabs 
+                  defaultValue="all" 
+                  value={activeTab} 
+                  onValueChange={setActiveTab}
+                  className="w-full"
+                >
+                  <TabsList className="bg-[#1F1F23] mb-4">
+                    <TabsTrigger value="all">Todos os Pagamentos</TabsTrigger>
+                    <TabsTrigger value="recurring">Pagamentos Recorrentes</TabsTrigger>
+                    <TabsTrigger value="unique">Pagamentos Únicos</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value={activeTab} className="mt-0">
+                    <div className="rounded-md border border-[#2A2A2E]">
+                      <Table>
+                        <TableHeader className="bg-[#1F1F23]">
+                          <TableRow className="hover:bg-[#2A2A2E] border-[#2A2A2E]">
+                            <TableHead className="w-[100px]">Vencimento</TableHead>
+                            <TableHead>Descrição</TableHead>
+                            <TableHead>Destinatário</TableHead>
+                            <TableHead>Recorrência</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Valor</TableHead>
+                            <TableHead className="text-right">Ações</TableHead>
                           </TableRow>
-                        ) : getPaymentsToDisplay().length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                              Nenhum pagamento encontrado.
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          getPaymentsToDisplay().map((payment) => (
-                            <TableRow key={payment.id} className="hover:bg-[#1F1F23] border-[#2A2A2E]">
-                              <TableCell className="font-medium">
-                                <div className="flex items-center">
-                                  <CalendarDays className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
-                                  {payment.due_date}
-                                </div>
-                              </TableCell>
-                              <TableCell>{payment.description}</TableCell>
-                              <TableCell>{payment.recipient}</TableCell>
-                              <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
-                              <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                              <TableCell className="text-right font-semibold">
-                                {payment.value.toLocaleString('pt-BR', { 
-                                  style: 'currency', 
-                                  currency: 'BRL' 
-                                })}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end space-x-1">
-                                  <Sheet open={isUpdateSheetOpen && selectedPayment?.id === payment.id} onOpenChange={(open) => {
-                                    if (open) {
-                                      setSelectedPayment(payment);
-                                    }
-                                    setIsUpdateSheetOpen(open);
-                                  }}>
-                                    <SheetTrigger asChild>
-                                      <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        className="h-8 w-8 text-fin-green"
-                                      >
-                                        <ArrowRight className="h-4 w-4" />
-                                      </Button>
-                                    </SheetTrigger>
-                                    <SheetContent className="bg-[#1A1A1E] border-[#2A2A2E] text-white">
-                                      <SheetHeader>
-                                        <SheetTitle>Atualizar Pagamento</SheetTitle>
-                                        <SheetDescription>
-                                          Atualize o status do pagamento para {payment.description}
-                                        </SheetDescription>
-                                      </SheetHeader>
-                                      <div className="py-6">
-                                        <div className="mb-6">
-                                          <h3 className="text-lg font-semibold mb-2">Detalhes do Pagamento</h3>
-                                          <div className="grid grid-cols-2 gap-2 text-sm">
-                                            <div className="text-muted-foreground">Descrição:</div>
-                                            <div>{payment.description}</div>
-                                            <div className="text-muted-foreground">Destinatário:</div>
-                                            <div>{payment.recipient}</div>
-                                            <div className="text-muted-foreground">Valor:</div>
-                                            <div>{payment.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
-                                            <div className="text-muted-foreground">Vencimento:</div>
-                                            <div>{payment.due_date}</div>
-                                            <div className="text-muted-foreground">Método:</div>
-                                            <div>{payment.payment_method}</div>
-                                            <div className="text-muted-foreground">Recorrência:</div>
-                                            <div>{payment.recurrence}</div>
-                                            <div className="text-muted-foreground">Status Atual:</div>
-                                            <div>{getStatusBadge(payment.status)}</div>
-                                          </div>
-                                        </div>
-                                        
-                                        <h3 className="text-lg font-semibold mb-4">Atualizar Status</h3>
-                                        <div className="grid grid-cols-1 gap-4">
-                                          <Button 
-                                            className="bg-fin-green text-black hover:bg-fin-green/90 justify-start"
-                                            onClick={() => handleUpdatePaymentStatus(payment, "completed")}
-                                          >
-                                            <Check className="mr-2 h-4 w-4" /> Marcar como Pago
-                                          </Button>
-                                          <Button 
-                                            className="bg-amber-500 text-black hover:bg-amber-500/90 justify-start"
-                                            onClick={() => handleUpdatePaymentStatus(payment, "pending")}
-                                          >
-                                            <Clock className="mr-2 h-4 w-4" /> Marcar como Pendente
-                                          </Button>
-                                          <Button 
-                                            className="bg-fin-red text-black hover:bg-fin-red/90 justify-start"
-                                            onClick={() => handleUpdatePaymentStatus(payment, "overdue")}
-                                          >
-                                            <AlertCircle className="mr-2 h-4 w-4" /> Marcar como Atrasado
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    </SheetContent>
-                                  </Sheet>
-                                  
-                                  <Button 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    className="h-8 w-8"
-                                    onClick={() => handleDeletePayment(payment.id)}
-                                  >
-                                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                                  </Button>
+                        </TableHeader>
+                        <TableBody>
+                          {loading ? (
+                            <TableRow>
+                              <TableCell colSpan={7} className="h-24 text-center">
+                                <div className="flex justify-center items-center">
+                                  <Loader2 className="h-6 w-6 text-fin-green animate-spin mr-2" />
+                                  <span>Carregando pagamentos...</span>
                                 </div>
                               </TableCell>
                             </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </TabsContent>
-              </Tabs>
+                          ) : getPaymentsToDisplay().length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                Nenhum pagamento encontrado.
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            getPaymentsToDisplay().map((payment) => (
+                              <TableRow key={payment.id} className="hover:bg-[#1F1F23] border-[#2A2A2E]">
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center">
+                                    <CalendarDays className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                                    {payment.due_date}
+                                  </div>
+                                </TableCell>
+                                <TableCell>{payment.description}</TableCell>
+                                <TableCell>{payment.recipient}</TableCell>
+                                <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
+                                <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                                <TableCell className="text-right font-semibold">
+                                  {payment.value.toLocaleString('pt-BR', { 
+                                    style: 'currency', 
+                                    currency: 'BRL' 
+                                  })}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end space-x-1">
+                                    <Sheet open={isUpdateSheetOpen && selectedPayment?.id === payment.id} onOpenChange={(open) => {
+                                      if (open) {
+                                        setSelectedPayment(payment);
+                                      }
+                                      setIsUpdateSheetOpen(open);
+                                    }}>
+                                      <SheetTrigger asChild>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-8 w-8 text-fin-green"
+                                        >
+                                          <ArrowRight className="h-4 w-4" />
+                                        </Button>
+                                      </SheetTrigger>
+                                      <SheetContent className="bg-[#1A1A1E] border-[#2A2A2E] text-white">
+                                        <SheetHeader>
+                                          <SheetTitle>Atualizar Pagamento</SheetTitle>
+                                          <SheetDescription>
+                                            Atualize o status do pagamento para {payment.description}
+                                          </SheetDescription>
+                                        </SheetHeader>
+                                        <div className="py-6">
+                                          <div className="mb-6">
+                                            <h3 className="text-lg font-semibold mb-2">Detalhes do Pagamento</h3>
+                                            <div className="grid grid-cols-2 gap-2 text-sm">
+                                              <div className="text-muted-foreground">Descrição:</div>
+                                              <div>{payment.description}</div>
+                                              <div className="text-muted-foreground">Destinatário:</div>
+                                              <div>{payment.recipient}</div>
+                                              <div className="text-muted-foreground">Valor:</div>
+                                              <div>{payment.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
+                                              <div className="text-muted-foreground">Vencimento:</div>
+                                              <div>{payment.due_date}</div>
+                                              <div className="text-muted-foreground">Método:</div>
+                                              <div>{payment.payment_method}</div>
+                                              <div className="text-muted-foreground">Recorrência:</div>
+                                              <div>{payment.recurrence}</div>
+                                              <div className="text-muted-foreground">Status Atual:</div>
+                                              <div>{getStatusBadge(payment.status)}</div>
+                                            </div>
+                                          </div>
+                                          
+                                          <h3 className="text-lg font-semibold mb-4">Atualizar Status</h3>
+                                          <div className="grid grid-cols-1 gap-4">
+                                            <Button 
+                                              className="bg-fin-green text-black hover:bg-fin-green/90 justify-start"
+                                              onClick={() => handleUpdatePaymentStatus(payment, "completed")}
+                                            >
+                                              <Check className="mr-2 h-4 w-4" /> Marcar como Pago
+                                            </Button>
+                                            <Button 
+                                              className="bg-amber-500 text-black hover:bg-amber-500/90 justify-start"
+                                              onClick={() => handleUpdatePaymentStatus(payment, "pending")}
+                                            >
+                                              <Clock className="mr-2 h-4 w-4" /> Marcar como Pendente
+                                            </Button>
+                                            <Button 
+                                              className="bg-fin-red text-black hover:bg-fin-red/90 justify-start"
+                                              onClick={() => handleUpdatePaymentStatus(payment, "overdue")}
+                                            >
+                                              <AlertCircle className="mr-2 h-4 w-4" /> Marcar como Atrasado
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </SheetContent>
+                                    </Sheet>
+                                    
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-8 w-8"
+                                      onClick={() => handleDeletePayment(payment.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                <PaymentCalendarView 
+                  payments={filteredPayments} 
+                  currentDate={dateRange.from} 
+                />
+              )}
               
             </div>
           </CardContent>

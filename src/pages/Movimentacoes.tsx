@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { 
   ArrowLeftRight, 
@@ -5,8 +6,7 @@ import {
   Download, 
   Filter, 
   Plus, 
-  Search, 
-  Trash2,
+  Search,
   Loader2 
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,21 +18,15 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
+import { TransactionList } from "@/components/transactions/TransactionList";
+import { DateFilter } from "@/components/payments/DateFilter";
+import { startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 
 // Define the Transaction type based on the database schema
 interface Transaction {
@@ -53,6 +47,17 @@ const Movimentacoes = () => {
   const [filterType, setFilterType] = useState<string | null>(null);
   const { user } = useAuth();
   
+  // Date filter states
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [dateRange, setDateRange] = useState<{
+    from: Date;
+    to: Date;
+  }>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date())
+  });
+  const [dateFilterMode, setDateFilterMode] = useState<"current" | "prev" | "next" | "custom">("current");
+  
   // New transaction form state
   const [newTransaction, setNewTransaction] = useState({
     description: "",
@@ -67,7 +72,32 @@ const Movimentacoes = () => {
     if (user) {
       fetchTransactions();
     }
-  }, [filterType, user]);
+  }, [filterType, user, dateRange]);
+
+  // Update date range when date filter mode changes
+  useEffect(() => {
+    switch (dateFilterMode) {
+      case "current":
+        setDateRange({
+          from: startOfMonth(currentDate),
+          to: endOfMonth(currentDate)
+        });
+        break;
+      case "prev":
+        setDateRange({
+          from: startOfMonth(subMonths(currentDate, 1)),
+          to: endOfMonth(subMonths(currentDate, 1))
+        });
+        break;
+      case "next":
+        setDateRange({
+          from: startOfMonth(addMonths(currentDate, 1)),
+          to: endOfMonth(addMonths(currentDate, 1))
+        });
+        break;
+      // Custom range is handled directly by the date picker
+    }
+  }, [dateFilterMode, currentDate]);
 
   const fetchTransactions = async () => {
     try {
@@ -80,6 +110,8 @@ const Movimentacoes = () => {
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
+        .gte('date', dateRange.from.toISOString())
+        .lte('date', dateRange.to.toISOString())
         .order('date', { ascending: false });
       
       // Apply filter if set
@@ -202,6 +234,27 @@ const Movimentacoes = () => {
     }
   };
 
+  // Date filter handlers
+  const handlePrevMonth = () => {
+    setDateFilterMode("prev");
+    setCurrentDate(prevDate => subMonths(prevDate, 1));
+  };
+
+  const handleNextMonth = () => {
+    setDateFilterMode("next");
+    setCurrentDate(prevDate => addMonths(prevDate, 1));
+  };
+
+  const handleCurrentMonth = () => {
+    setDateFilterMode("current");
+    setCurrentDate(new Date());
+  };
+
+  const handleDateRangeChange = (range: { from: Date; to: Date }) => {
+    setDateRange(range);
+    setDateFilterMode("custom");
+  };
+
   // Filter transactions based on search term
   const filteredTransactions = transactions.filter(transaction => 
     transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -303,7 +356,7 @@ const Movimentacoes = () => {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col space-y-4">
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center flex-wrap gap-2">
                 <div className="relative w-full max-w-sm">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -315,7 +368,17 @@ const Movimentacoes = () => {
                   />
                 </div>
                 
-                <div className="flex space-x-2">
+                <div className="flex flex-wrap gap-2 items-center">
+                  {/* Date filter component */}
+                  <DateFilter 
+                    dateRange={dateRange}
+                    dateFilterMode={dateFilterMode}
+                    onPrevMonth={handlePrevMonth}
+                    onNextMonth={handleNextMonth}
+                    onCurrentMonth={handleCurrentMonth}
+                    onDateRangeChange={handleDateRangeChange}
+                  />
+                  
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" className="border-[#2A2A2E] bg-[#1F1F23]">
@@ -342,68 +405,11 @@ const Movimentacoes = () => {
                 </div>
               </div>
               
-              <div className="rounded-md border border-[#2A2A2E]">
-                <Table>
-                  <TableHeader className="bg-[#1F1F23]">
-                    <TableRow className="hover:bg-[#2A2A2E] border-[#2A2A2E]">
-                      <TableHead className="w-[100px]">Data</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead className="text-right">Valor</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center">
-                          <div className="flex justify-center items-center">
-                            <Loader2 className="h-6 w-6 text-fin-green animate-spin mr-2" />
-                            <span>Carregando transações...</span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : filteredTransactions.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                          Nenhuma transação encontrada.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredTransactions.map((transaction) => (
-                        <TableRow key={transaction.id} className="hover:bg-[#1F1F23] border-[#2A2A2E]">
-                          <TableCell className="font-medium">{transaction.date}</TableCell>
-                          <TableCell>{transaction.description}</TableCell>
-                          <TableCell>
-                            <Badge variant={transaction.type === "income" ? "success" : "destructive"} className="bg-opacity-20 text-xs">
-                              {transaction.category}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className={`text-right font-semibold ${
-                            transaction.type === "income" ? "text-fin-green" : "text-fin-red"
-                          }`}>
-                            {transaction.type === "income" ? "+" : "-"} 
-                            {transaction.value.toLocaleString('pt-BR', { 
-                              style: 'currency', 
-                              currency: 'BRL' 
-                            })}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8"
-                              onClick={() => handleDeleteTransaction(transaction.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-muted-foreground" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+              <TransactionList 
+                transactions={filteredTransactions}
+                loading={loading}
+                onDeleteTransaction={handleDeleteTransaction}
+              />
             </div>
           </CardContent>
         </Card>
