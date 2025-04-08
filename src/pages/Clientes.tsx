@@ -82,7 +82,8 @@ const Clientes = () => {
     status: "active",
     recurring_payment: false,
     description: "",
-    payment_status: "pending"
+    payment_status: "pending",
+    last_payment_date: null
   });
   
   const [startDateOpen, setStartDateOpen] = useState(false);
@@ -218,7 +219,8 @@ const Clientes = () => {
         status: "active",
         recurring_payment: false,
         description: "",
-        payment_status: "pending"
+        payment_status: "pending",
+        last_payment_date: null
       });
       
       setIsDialogOpen(false);
@@ -279,7 +281,8 @@ const Clientes = () => {
           status: selectedClient.status,
           recurring_payment: selectedClient.recurring_payment,
           description: selectedClient.description,
-          payment_status: selectedClient.payment_status
+          payment_status: selectedClient.payment_status,
+          last_payment_date: selectedClient.last_payment_date
         })
         .eq('id', selectedClient.id);
       
