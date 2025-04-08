@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   Users, 
@@ -13,7 +12,8 @@ import {
   XCircle,
   CheckCircle,
   ArrowUp,
-  Clock
+  Clock,
+  Trash2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format, parseISO, startOfMonth, endOfMonth } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -87,6 +97,7 @@ const Clientes = () => {
   
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [endDateOpen, setEndDateOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   
   useEffect(() => {
     if (user) {
@@ -252,6 +263,8 @@ const Clientes = () => {
         description: "O cliente foi excluído com sucesso"
       });
       
+      setIsEditSheetOpen(false);
+      setDeleteConfirmOpen(false);
       fetchClients();
     } catch (error: any) {
       console.error('Error deleting client:', error);
@@ -865,28 +878,18 @@ const Clientes = () => {
                     />
                   </div>
                   
-                  <div className="flex justify-end gap-2 pt-4">
-                    <Button variant="outline" onClick={() => setIsEditSheetOpen(false)}>
-                      Cancelar
+                  <div className="flex justify-between gap-2 pt-4">
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => setDeleteConfirmOpen(true)}
+                      className="flex items-center"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Excluir Cliente
                     </Button>
-                    <Button className="bg-fin-green text-black hover:bg-fin-green/90" onClick={handleUpdateClient}>
-                      Salvar alterações
-                    </Button>
-                  </div>
-                </TabsContent>
-                <TabsContent value="transactions" className="mt-4">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-medium">Recebimentos do Cliente</h3>
-                    <ClientTransactionsList clientId={selectedClient.id} />
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
-    </div>
-  );
-};
-
-export default Clientes;
+                    
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setIsEditSheetOpen(false)}>
+                        Cancelar
+                      </Button>
+                      <Button className="bg-fin-green text-black hover:bg-fin-
