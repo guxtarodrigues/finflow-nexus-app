@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   ArrowLeftRight, 
@@ -34,7 +33,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 
-// Define the Transaction type based on the database schema
 interface Transaction {
   id: string;
   date: string;
@@ -62,7 +60,6 @@ const Movimentacoes = () => {
   const [filterType, setFilterType] = useState<string | null>(null);
   const { user } = useAuth();
   
-  // Date filter states
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dateRange, setDateRange] = useState<{
     from: Date;
@@ -73,7 +70,6 @@ const Movimentacoes = () => {
   });
   const [dateFilterMode, setDateFilterMode] = useState<"current" | "prev" | "next" | "custom">("current");
   
-  // New transaction form state
   const [newTransaction, setNewTransaction] = useState({
     description: "",
     category_id: "",
@@ -91,7 +87,6 @@ const Movimentacoes = () => {
     }
   }, [filterType, user, dateRange]);
 
-  // Update date range when date filter mode changes
   useEffect(() => {
     switch (dateFilterMode) {
       case "current":
@@ -112,7 +107,6 @@ const Movimentacoes = () => {
           to: endOfMonth(addMonths(currentDate, 1))
         });
         break;
-      // Custom range is handled directly by the date picker
     }
   }, [dateFilterMode, currentDate]);
 
@@ -150,16 +144,15 @@ const Movimentacoes = () => {
       
       setLoading(true);
       
-      // Start building the query
       let query = supabase
         .from('transactions')
         .select('*')
         .eq('user_id', user.id)
+        .eq('status', 'completed')
         .gte('date', dateRange.from.toISOString())
         .lte('date', dateRange.to.toISOString())
         .order('date', { ascending: false });
       
-      // Apply filter if set
       if (filterType) {
         if (filterType === 'income' || filterType === 'expense') {
           query = query.eq('type', filterType);
@@ -175,7 +168,6 @@ const Movimentacoes = () => {
         return;
       }
       
-      // Format the transactions data
       const formattedTransactions = data.map((item) => ({
         id: item.id,
         date: format(new Date(item.date), 'dd/MM/yyyy'),
@@ -212,7 +204,6 @@ const Movimentacoes = () => {
         return;
       }
 
-      // Get the category name from the selected category_id
       const selectedCategory = categories.find(cat => cat.id === newTransaction.category_id);
       if (!selectedCategory) {
         toast({
@@ -223,7 +214,6 @@ const Movimentacoes = () => {
         return;
       }
 
-      // Insert single object (not an array) and format data correctly
       const { error } = await supabase
         .from('transactions')
         .insert({
@@ -239,7 +229,6 @@ const Movimentacoes = () => {
 
       if (error) throw error;
       
-      // Reset form and close dialog
       setNewTransaction({
         description: "",
         category_id: "",
@@ -249,7 +238,6 @@ const Movimentacoes = () => {
       });
       setIsDialogOpen(false);
       
-      // Refresh transaction list
       await fetchTransactions();
       
       toast({
@@ -275,7 +263,6 @@ const Movimentacoes = () => {
 
       if (error) throw error;
       
-      // Refresh transaction list
       await fetchTransactions();
       
       toast({
@@ -292,7 +279,6 @@ const Movimentacoes = () => {
     }
   };
 
-  // Date filter handlers
   const handlePrevMonth = () => {
     setDateFilterMode("prev");
     setCurrentDate(prevDate => subMonths(prevDate, 1));
@@ -313,13 +299,11 @@ const Movimentacoes = () => {
     setDateFilterMode("custom");
   };
 
-  // Filter transactions based on search term
   const filteredTransactions = transactions.filter(transaction => 
     transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
     transaction.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Filter categories based on transaction type
   const filteredCategories = categories.filter(category => 
     category.type === newTransaction.type || category.type === "investment"
   );
@@ -509,7 +493,6 @@ const Movimentacoes = () => {
                 </div>
                 
                 <div className="flex flex-wrap gap-2 items-center">
-                  {/* Date filter component */}
                   <DateFilter 
                     dateRange={dateRange}
                     dateFilterMode={dateFilterMode}
