@@ -249,6 +249,20 @@ const Clientes = () => {
   
   const handleDeleteClient = async (id: string) => {
     try {
+      const { error: paymentsError } = await supabase
+        .from('payments')
+        .delete()
+        .eq('client_id', id);
+      
+      if (paymentsError) throw paymentsError;
+      
+      const { error: transactionsError } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('client_id', id);
+      
+      if (transactionsError) throw transactionsError;
+      
       const { error } = await supabase
         .from('clients')
         .delete()
