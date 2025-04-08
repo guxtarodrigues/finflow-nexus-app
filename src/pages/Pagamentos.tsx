@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { 
   CreditCard, 
@@ -934,4 +935,30 @@ const Pagamentos = () => {
         
         <Card>
           <CardHeader className="pb-2">
-            <
+            <CardTitle className="text-sm font-medium">
+              <div className="flex items-center">
+                <div className="mr-2 p-2 bg-blue-500/10 rounded">
+                  <Repeat className="h-4 w-4 text-blue-500" />
+                </div>
+                Pagamentos Recorrentes
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(dashboardData.monthlyRecurringAmount)}</div>
+            <p className="text-xs text-muted-foreground">
+              {dashboardData.totalRecurring} pagamentos recorrentes
+            </p>
+            <div className="mt-4">
+              <span className="text-xs font-medium inline-flex items-center">
+                <RefreshCw className="h-3 w-3 mr-1" /> Valor mensal estimado
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+export default Pagamentos;
