@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   ArrowLeftRight, 
@@ -240,7 +239,6 @@ const Recebimentos = () => {
         .gte('date', dateRange.from.toISOString())
         .lte('date', dateRange.to.toISOString());
       
-      // Apply status filter if set
       if (filterStatus) {
         query = query.eq('status', filterStatus);
       }
@@ -279,28 +277,6 @@ const Recebimentos = () => {
         }
       }
       
-      // Also fetch payment data for completed payments received (representing income)
-      let paymentsData: any[] = [];
-      
-      try {
-        const { data: payments, error: paymentsError } = await supabase
-          .from('payments')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('status', 'completed')
-          .gte('due_date', dateRange.from.toISOString())
-          .lte('due_date', dateRange.to.toISOString())
-          .order('due_date', { ascending: false });
-          
-        if (!paymentsError && payments) {
-          paymentsData = payments;
-        }
-      } catch (error) {
-        console.error('Error fetching payments:', error);
-        // Continue without payments data
-      }
-      
-      // Format the transactions into receipts
       const formattedTransactions = typedTransactions.map((item) => {
         const client = item.client_id ? clientsMap.get(item.client_id) : null;
         
@@ -318,33 +294,12 @@ const Recebimentos = () => {
         };
       });
       
-      // Format the payments into receipts
-      const formattedPayments = paymentsData.map((payment) => {
-        const client = payment.client_id ? clientsMap.get(payment.client_id) : null;
-        
-        return {
-          id: `payment-${payment.id}`,
-          date: format(new Date(payment.due_date), 'dd/MM/yyyy'),
-          description: `${payment.description} (Pagamento)`,
-          category: payment.category || 'Pagamento',
-          category_id: payment.category_id || '',
-          value: Number(payment.value),
-          status: 'completed', // All included payments are completed
-          client_id: payment.client_id || undefined,
-          client_name: client ? client.name : payment.recipient,
-          source: 'payment'
-        };
-      });
+      let allReceipts = formattedTransactions;
       
-      // Combine all receipts
-      let allReceipts = [...formattedTransactions, ...formattedPayments];
-      
-      // Apply source filter if set
       if (filterSource) {
         allReceipts = allReceipts.filter(receipt => receipt.source === filterSource);
       }
       
-      // Sort by date (newest first)
       allReceipts.sort((a, b) => {
         const dateA = new Date(a.date.split('/').reverse().join('-'));
         const dateB = new Date(b.date.split('/').reverse().join('-'));
@@ -542,7 +497,6 @@ const Recebimentos = () => {
   };
 
   const openEditDialog = (receipt: Receipt) => {
-    // Only allow editing transactions, not payments
     if (receipt.source === 'payment') {
       toast({
         title: "Edição não permitida",

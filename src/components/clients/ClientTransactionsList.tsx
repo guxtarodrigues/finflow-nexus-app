@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { 
   Table,
@@ -51,11 +50,9 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
       if (error) throw error;
       
       if (originalTransactions) {
-        // First, process the original transactions
         const processedTransactions: Transaction[] = [];
         
         originalTransactions.forEach(transaction => {
-          // Add the original transaction with explicitly defined types
           processedTransactions.push({
             id: transaction.id,
             date: format(new Date(transaction.date), 'dd/MM/yyyy'),
@@ -68,7 +65,6 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             recurrence_count: transaction.recurrence_count
           });
           
-          // If it's a recurring transaction, add future occurrences
           if (transaction.recurrence && transaction.recurrence !== 'once') {
             const getMonthsToAdd = (recurrenceType: string) => {
               switch (recurrenceType) {
@@ -83,11 +79,11 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             
             const getOccurrences = (recurrenceType: string) => {
               switch (recurrenceType) {
-                case 'monthly': return 12; // Show for a year
-                case 'bimonthly': return 6; // Show for a year
-                case 'quarterly': return 4; // Show for a year
-                case 'biannual': return 2; // Show for a year
-                case 'annual': return 1; // Show for a year
+                case 'monthly': return 12;
+                case 'bimonthly': return 6;
+                case 'quarterly': return 4;
+                case 'biannual': return 2;
+                case 'annual': return 1;
                 default: return 0;
               }
             };
@@ -97,12 +93,10 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             const originalDate = new Date(transaction.date);
             const currentDate = new Date();
             
-            // Only show future occurrences
             if (monthsToAdd > 0) {
               for (let i = 1; i <= occurrences; i++) {
                 const futureDate = addMonths(originalDate, monthsToAdd * i);
                 
-                // Only include future dates
                 if (futureDate > currentDate) {
                   processedTransactions.push({
                     id: `${transaction.id}-recurrence-${i}`,
@@ -121,7 +115,6 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
           }
         });
         
-        // Sort transactions by date (newest first)
         processedTransactions.sort((a, b) => {
           const dateA = parseISO(a.date.split('/').reverse().join('-'));
           const dateB = parseISO(b.date.split('/').reverse().join('-'));
@@ -148,7 +141,6 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
 
   const handleMarkAsReceived = async (id: string) => {
     try {
-      // Skip for recurring transactions that don't exist in the database yet
       if (id.includes('recurrence')) {
         toast({
           title: "Operação não permitida",
