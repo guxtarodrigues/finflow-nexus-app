@@ -11,7 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Check, RefreshCcw } from "lucide-react";
-import { format, addMonths, parseISO } from "date-fns";
+import { format, addMonths, parseISO, isAfter, isBefore } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -148,8 +148,13 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
                   format(currentDate, 'yyyy-MM') && 
                   t.description.includes('Contrato'))) {
                 
+                // Create a unique transaction ID for contract-based payments using UUID format
+                // We'll use the actual transaction ID if it exists in the database
+                const yearMonth = format(currentDate, 'yyyy-MM');
+                const contractTransactionId = `contract-${yearMonth}-${clientId.substring(0, 8)}`;
+                
                 processedTransactions.push({
-                  id: `contract-${clientId}-${format(currentDate, 'yyyy-MM')}`,
+                  id: contractTransactionId,
                   date: paymentDate,
                   description: `Contrato mensal - ${clientData.name}`,
                   category: 'Contrato',
@@ -192,10 +197,10 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
     fetchTransactions();
   }, [clientId]);
 
-  const handleMarkAsReceived = async (id: string) => {
+  const handleMarkAsReceived = async (transaction: Transaction) => {
     try {
       // Skip for recurring transactions that don't exist in the database yet
-      if (id.includes('recurrence')) {
+      if (transaction.id.includes('recurrence')) {
         toast({
           title: "Operação não permitida",
           description: "Não é possível marcar como recebido um pagamento recorrente futuro.",
@@ -204,12 +209,48 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
         return;
       }
       
-      setProcessingId(id);
+      // Skip for contract-based transactions that are generated on the fly
+      if (transaction.id.startsWith('contract-')) {
+        // For contract transactions, we need to create a real transaction record
+        setProcessingId(transaction.id);
+        
+        // Parse the date from display format to ISO format
+        const dateParts = transaction.date.split('/');
+        const isoDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+        
+        // Insert a new transaction record for this contract payment
+        const { data: newTransaction, error: insertError } = await supabase
+          .from('transactions')
+          .insert({
+            description: transaction.description,
+            date: isoDate,
+            value: transaction.value,
+            category: transaction.category,
+            type: 'income',
+            status: 'completed',
+            client_id: clientId
+          })
+          .select()
+          .single();
+        
+        if (insertError) throw insertError;
+        
+        toast({
+          title: "Recebimento confirmado",
+          description: "O recebimento do contrato foi registrado com sucesso",
+        });
+        
+        fetchTransactions();
+        return;
+      }
+      
+      // For regular transactions that exist in the database
+      setProcessingId(transaction.id);
       
       const { error } = await supabase
         .from('transactions')
         .update({ status: 'completed' })
-        .eq('id', id);
+        .eq('id', transaction.id);
 
       if (error) throw error;
       
@@ -286,7 +327,11 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             transactions.map((transaction) => (
               <TableRow 
                 key={transaction.id} 
-                className={`hover:bg-[#1F1F23] border-[#2A2A2E] ${transaction.id.includes('recurrence') ? 'bg-[#1A1A1E]/30' : ''}`}
+                className={`hover:bg-[#1F1F23] border-[#2A2A2E] ${
+                  transaction.id.includes('recurrence') || transaction.id.startsWith('contract-') 
+                    ? 'bg-[#1A1A1E]/30' 
+                    : ''
+                }`}
               >
                 <TableCell className="font-medium">
                   {transaction.date}
@@ -311,18 +356,18 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
                 <TableCell>
                   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(transaction.status)}`}>
                     {getStatusText(transaction.status)}
-                    {transaction.recurrence_count && (
+                    {(transaction.recurrence_count || transaction.id.startsWith('contract-')) && transaction.status === 'pending' && (
                       <span className="ml-1 text-xs text-fin-green"> (Futuro)</span>
                     )}
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
-                  {transaction.status === 'pending' && !transaction.id.includes('recurrence') && (
+                  {transaction.status === 'pending' && (
                     <Button 
                       variant="receipt" 
                       size="icon" 
                       className="h-8 w-8"
-                      onClick={() => handleMarkAsReceived(transaction.id)}
+                      onClick={() => handleMarkAsReceived(transaction)}
                       disabled={processingId === transaction.id}
                     >
                       {processingId === transaction.id ? (
