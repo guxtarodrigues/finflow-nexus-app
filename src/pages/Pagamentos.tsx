@@ -209,24 +209,12 @@ const Pagamentos = () => {
     switch (dateFilterMode) {
       case "current":
         setCurrentDate(new Date());
-        setDateRange({
-          from: startOfMonth(new Date()),
-          to: endOfMonth(new Date())
-        });
         break;
       case "prev":
         setCurrentDate(prevDate => subMonths(prevDate, 1));
-        setDateRange({
-          from: startOfMonth(subMonths(currentDate, 1)),
-          to: endOfMonth(subMonths(currentDate, 1))
-        });
         break;
       case "next":
         setCurrentDate(prevDate => addMonths(prevDate, 1));
-        setDateRange({
-          from: startOfMonth(addMonths(currentDate, 1)),
-          to: endOfMonth(addMonths(currentDate, 1))
-        });
         break;
     }
   }, [dateFilterMode]);
@@ -976,8 +964,22 @@ const Pagamentos = () => {
           <DateFilter 
             dateRange={dateRange}
             dateFilterMode={dateFilterMode}
-            onPrevMonth={() => setDateFilterMode("prev")}
-            onNextMonth={() => setDateFilterMode("next")}
+            onPrevMonth={() => setDateFilterMode((prev) => {
+              if (prev === "current" || prev === "next" || prev === "prev") {
+                return "prev";
+              } else {
+                setCurrentDate(prevDate => subMonths(prevDate, 1));
+                return "custom";
+              }
+            })}
+            onNextMonth={() => setDateFilterMode((prev) => {
+              if (prev === "current" || prev === "next" || prev === "prev") {
+                return "next";
+              } else {
+                setCurrentDate(prevDate => addMonths(prevDate, 1));
+                return "custom";
+              }
+            })}
             onCurrentMonth={() => setDateFilterMode("current")}
             onDateRangeChange={(range) => {
               setDateRange(range);

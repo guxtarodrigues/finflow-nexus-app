@@ -1,6 +1,6 @@
-
 import { useState } from "react";
 import { format, parse, addMonths, isSameDay } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Repeat } from "lucide-react";
 
@@ -20,21 +20,17 @@ interface PaymentCalendarViewProps {
 }
 
 export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarViewProps) => {
-  // Helper function to generate future recurring payments
   const generateFuturePayments = () => {
     const allPayments: Payment[] = [...payments];
     
-    // Process each payment to generate future instances based on recurrence
     payments.forEach(payment => {
       if (!payment.recurrence || payment.recurrence === 'Único') {
-        return; // Skip non-recurring payments
+        return;
       }
       
       try {
-        // Parse the payment due_date from dd/MM/yyyy format to a Date object
         const originalDate = parse(payment.due_date, 'dd/MM/yyyy', new Date());
         
-        // Define the number of months to add based on recurrence type
         const getMonthsToAdd = (recurrence: string) => {
           switch (recurrence) {
             case 'Mensal': return 1;
@@ -44,12 +40,11 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
           }
         };
         
-        // Define how many future instances to generate
         const getFutureInstances = (recurrence: string) => {
           switch (recurrence) {
-            case 'Mensal': return 24; // 2 years
-            case 'Trimestral': return 8; // 2 years
-            case 'Anual': return 2; // 2 years
+            case 'Mensal': return 24;
+            case 'Trimestral': return 8;
+            case 'Anual': return 2;
             default: return 0;
           }
         };
@@ -57,12 +52,10 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
         const monthsToAdd = getMonthsToAdd(payment.recurrence);
         const futureInstances = getFutureInstances(payment.recurrence);
         
-        // Generate future instances
         if (monthsToAdd > 0) {
           for (let i = 1; i <= futureInstances; i++) {
             const futureDate = addMonths(originalDate, monthsToAdd * i);
             
-            // Add future payment instance
             allPayments.push({
               id: `${payment.id}-future-${i}`,
               due_date: format(futureDate, 'dd/MM/yyyy'),
@@ -82,17 +75,13 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
     return allPayments;
   };
 
-  // Get all payments including future recurring ones
   const allPayments = generateFuturePayments();
 
-  // Helper function to get payments for a specific date
   const getPaymentsForDate = (date: Date) => {
     return allPayments.filter(payment => {
       try {
-        // Parse the payment due_date from dd/MM/yyyy format to a Date object
         const paymentDate = parse(payment.due_date, 'dd/MM/yyyy', new Date());
         
-        // Compare day, month and year separately to avoid time issues
         return (
           date.getDate() === paymentDate.getDate() &&
           date.getMonth() === paymentDate.getMonth() &&
@@ -105,14 +94,12 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
     });
   };
 
-  // Get the number of days in the current month
   const daysInMonth = new Date(
     currentDate.getFullYear(),
     currentDate.getMonth() + 1,
     0
   ).getDate();
   
-  // Get the day of the week for the first day of the month (0 = Sunday, 1 = Monday, etc.)
   const firstDayOfMonth = new Date(
     currentDate.getFullYear(),
     currentDate.getMonth(),
@@ -123,7 +110,7 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
     <div className="rounded-md border border-[#2A2A2E] p-4">
       <div className="mb-4 text-center">
         <h3 className="text-lg font-semibold">
-          Calendário de Pagamentos - {format(currentDate, 'MMMM yyyy')}
+          Calendário de Pagamentos - {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
         </h3>
       </div>
       <div className="grid grid-cols-7 gap-1">
@@ -133,12 +120,10 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
           </div>
         ))}
         
-        {/* Empty cells for days before the first day of the month */}
         {Array.from({ length: firstDayOfMonth }, (_, i) => (
           <div key={`empty-${i}`} className="p-2 h-24 bg-[#1F1F23]/30 rounded-md"></div>
         ))}
         
-        {/* Calendar days */}
         {Array.from({ length: daysInMonth }, (_, i) => {
           const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), i + 1);
           const dayPayments = getPaymentsForDate(date);
