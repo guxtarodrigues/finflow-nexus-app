@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   ArrowLeftRight, 
@@ -51,7 +50,7 @@ interface Receipt {
   date: string;
   description: string;
   category: string;
-  category_id?: string; // Added to fix type error
+  category_id: string; // Added to fix type error
   value: number;
   status: string;
   client_id?: string;
@@ -84,7 +83,6 @@ const Recebimentos = () => {
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const { user } = useAuth();
   
-  // Date filter states
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dateRange, setDateRange] = useState<{
     from: Date;
@@ -95,7 +93,6 @@ const Recebimentos = () => {
   });
   const [dateFilterMode, setDateFilterMode] = useState<"current" | "prev" | "next" | "custom">("current");
   
-  // Form validation error state
   const [formErrors, setFormErrors] = useState<{
     description?: boolean;
     category_id?: boolean;
@@ -104,7 +101,6 @@ const Recebimentos = () => {
     client_id?: boolean;
   }>({});
   
-  // New receipt form state
   const [newReceipt, setNewReceipt] = useState({
     description: "",
     category_id: "",
@@ -124,7 +120,6 @@ const Recebimentos = () => {
     }
   }, [filterStatus, user, dateRange]);
 
-  // Update date range when date filter mode changes
   useEffect(() => {
     switch (dateFilterMode) {
       case "current":
@@ -145,7 +140,6 @@ const Recebimentos = () => {
           to: endOfMonth(addMonths(currentDate, 1))
         });
         break;
-      // Custom range is handled directly by the date picker
     }
   }, [dateFilterMode, currentDate]);
 
@@ -212,38 +206,58 @@ const Recebimentos = () => {
       
       setLoading(true);
       
-      // Fetch transactions and join with clients information
-      const { data, error } = await supabase
+      const { data: transactionsData, error: transactionsError } = await supabase
         .from('transactions')
-        .select(`
-          *,
-          clients(id, name)
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .eq('type', 'income')
         .gte('date', dateRange.from.toISOString())
         .lte('date', dateRange.to.toISOString())
         .order('date', { ascending: false });
       
-      if (error) throw error;
+      if (transactionsError) throw transactionsError;
       
-      if (!data) {
+      if (!transactionsData) {
         setReceipts([]);
         return;
       }
       
-      // Format the receipts data
-      const formattedReceipts = data.map((item) => ({
-        id: item.id,
-        date: format(new Date(item.date), 'dd/MM/yyyy'),
-        description: item.description,
-        category: item.category,
-        category_id: item.category_id,
-        value: Number(item.value),
-        status: item.status,
-        client_id: item.clients?.id, // Use optional chaining as this might be null
-        client_name: item.clients?.name // Use optional chaining as this might be null
-      }));
+      const clientsMap = new Map<string, { id: string, name: string }>();
+      
+      const transactionsWithClientId = transactionsData.filter(tx => tx.client_id);
+      
+      if (transactionsWithClientId.length > 0) {
+        const clientIds = [...new Set(transactionsWithClientId.map(tx => tx.client_id))];
+        
+        const { data: clientsData, error: clientsError } = await supabase
+          .from('clients')
+          .select('id, name')
+          .in('id', clientIds);
+        
+        if (clientsError) throw clientsError;
+        
+        if (clientsData) {
+          clientsData.forEach(client => {
+            clientsMap.set(client.id, { id: client.id, name: client.name });
+          });
+        }
+      }
+      
+      const formattedReceipts = transactionsData.map((item) => {
+        const client = item.client_id ? clientsMap.get(item.client_id) : null;
+        
+        return {
+          id: item.id,
+          date: format(new Date(item.date), 'dd/MM/yyyy'),
+          description: item.description,
+          category: item.category,
+          category_id: item.category_id,
+          value: Number(item.value),
+          status: item.status,
+          client_id: item.client_id,
+          client_name: client ? client.name : null
+        };
+      });
       
       setReceipts(formattedReceipts);
     } catch (error: any) {
@@ -284,7 +298,6 @@ const Recebimentos = () => {
         return;
       }
 
-      // Get the category name from the selected category_id
       const selectedCategory = categories.find(cat => cat.id === newReceipt.category_id);
       if (!selectedCategory) {
         toast({
@@ -295,7 +308,6 @@ const Recebimentos = () => {
         return;
       }
 
-      // Insert single object (not an array) and format data correctly
       const { error } = await supabase
         .from('transactions')
         .insert({
@@ -312,7 +324,6 @@ const Recebimentos = () => {
 
       if (error) throw error;
       
-      // Reset form and close dialog
       setNewReceipt({
         description: "",
         category_id: "",
@@ -324,7 +335,6 @@ const Recebimentos = () => {
       setIsDialogOpen(false);
       setFormErrors({});
       
-      // Refresh receipt list
       await fetchReceipts();
       
       toast({
@@ -345,7 +355,6 @@ const Recebimentos = () => {
     try {
       if (!user || !editingReceipt) return;
       
-      // Get the category name from the selected category_id
       const selectedCategory = categories.find(cat => cat.id === editingReceipt.category_id);
       if (!selectedCategory) {
         toast({
@@ -356,7 +365,6 @@ const Recebimentos = () => {
         return;
       }
 
-      // Update the receipt
       const { error } = await supabase
         .from('transactions')
         .update({
@@ -372,11 +380,9 @@ const Recebimentos = () => {
 
       if (error) throw error;
       
-      // Reset form and close dialog
       setEditingReceipt(null);
       setIsEditDialogOpen(false);
       
-      // Refresh receipt list
       await fetchReceipts();
       
       toast({
@@ -402,7 +408,6 @@ const Recebimentos = () => {
 
       if (error) throw error;
       
-      // Refresh receipt list
       await fetchReceipts();
       
       toast({
@@ -428,7 +433,6 @@ const Recebimentos = () => {
 
       if (error) throw error;
       
-      // Refresh receipt list
       await fetchReceipts();
       
       toast({
@@ -446,7 +450,6 @@ const Recebimentos = () => {
   };
 
   const openEditDialog = (receipt: Receipt) => {
-    // Format the receipt data for editing
     setEditingReceipt({
       ...receipt,
       date: format(new Date(receipt.date.split('/').reverse().join('-')), 'yyyy-MM-dd'),
@@ -454,7 +457,6 @@ const Recebimentos = () => {
     setIsEditDialogOpen(true);
   };
 
-  // Date filter handlers
   const handlePrevMonth = () => {
     setDateFilterMode("prev");
     setCurrentDate(prevDate => subMonths(prevDate, 1));
@@ -475,7 +477,6 @@ const Recebimentos = () => {
     setDateFilterMode("custom");
   };
 
-  // Filter receipts based on search term
   const filteredReceipts = receipts.filter(receipt => 
     receipt.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
     receipt.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -581,7 +582,6 @@ const Recebimentos = () => {
                             className="p-0 h-auto mt-1 text-fin-green"
                             onClick={() => {
                               setIsDialogOpen(false);
-                              // Add logic to navigate to clients page
                             }}
                           >
                             Criar cliente
@@ -632,7 +632,6 @@ const Recebimentos = () => {
                             className="p-0 h-auto mt-1 text-fin-green" 
                             onClick={() => {
                               setIsDialogOpen(false);
-                              // Add logic to navigate to categories page
                             }}
                           >
                             Criar categoria
@@ -783,7 +782,6 @@ const Recebimentos = () => {
                 </div>
                 
                 <div className="flex flex-wrap gap-2 items-center">
-                  {/* Date filter component */}
                   <DateFilter 
                     dateRange={dateRange}
                     dateFilterMode={dateFilterMode}
@@ -949,7 +947,6 @@ const Recebimentos = () => {
         </Card>
       </div>
 
-      {/* Edit Receipt Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[500px] bg-[#1A1A1E] border-[#2A2A2E] text-white">
           <DialogHeader>
