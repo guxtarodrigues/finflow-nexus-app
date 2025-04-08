@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { format } from "date-fns";
+import { format, parse } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 
 interface Payment {
@@ -20,13 +20,20 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
   // Helper function to get payments for a specific date
   const getPaymentsForDate = (date: Date) => {
     return payments.filter(payment => {
-      // Parse the date from dd/MM/yyyy format
-      const [day, month, year] = payment.due_date.split('/').map(Number);
-      return (
-        date.getDate() === day &&
-        date.getMonth() === month - 1 &&
-        date.getFullYear() === year
-      );
+      try {
+        // Parse the payment due_date from dd/MM/yyyy format to a Date object
+        const paymentDate = parse(payment.due_date, 'dd/MM/yyyy', new Date());
+        
+        // Compare day, month and year separately to avoid time issues
+        return (
+          date.getDate() === paymentDate.getDate() &&
+          date.getMonth() === paymentDate.getMonth() &&
+          date.getFullYear() === paymentDate.getFullYear()
+        );
+      } catch (error) {
+        console.error(`Error parsing date: ${payment.due_date}`, error);
+        return false;
+      }
     });
   };
 
