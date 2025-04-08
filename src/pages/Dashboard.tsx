@@ -1,13 +1,14 @@
+
 import { useState, useEffect } from "react";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { CircleDollarSign, TrendingUp, FileText, Clock, Users, CreditCard } from "lucide-react";
+import { CircleDollarSign, TrendingUp, FileText, Clock, Users, CreditCard, CheckCircle, TimerIcon, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { startOfMonth, endOfMonth, format, addMonths } from "date-fns";
+import { startOfMonth, endOfMonth, format, addMonths, subMonths, isAfter } from "date-fns";
 import { Client } from "@/types/clients";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -32,6 +33,9 @@ interface FinancialData {
   taxPayable: number;
   upcomingPayments: Payment[];
   clientsIncome: number;
+  paymentsReceived: number;
+  pendingPayments: number;
+  overduePayments: number;
 }
 
 const Dashboard = () => {
@@ -49,7 +53,10 @@ const Dashboard = () => {
     activeClients: 0,
     taxPayable: 0,
     upcomingPayments: [],
-    clientsIncome: 0
+    clientsIncome: 0,
+    paymentsReceived: 0,
+    pendingPayments: 0,
+    overduePayments: 0
   });
 
   useEffect(() => {
@@ -67,6 +74,8 @@ const Dashboard = () => {
       const currentMonthEnd = endOfMonth(new Date());
       const nextMonthStart = startOfMonth(addMonths(new Date(), 1));
       const nextMonthEnd = endOfMonth(addMonths(new Date(), 1));
+      const prevMonthStart = startOfMonth(subMonths(new Date(), 1));
+      const prevMonthEnd = endOfMonth(subMonths(new Date(), 1));
       
       // Fetch transactions
       const { data: transactions, error: transactionsError } = await supabase
@@ -86,6 +95,14 @@ const Dashboard = () => {
         .limit(5);
       
       if (paymentsError) throw paymentsError;
+      
+      // Fetch all payments to calculate statistics
+      const { data: allPayments, error: allPaymentsError } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('user_id', user?.id);
+        
+      if (allPaymentsError) throw allPaymentsError;
       
       // Fetch active clients - Fix for type instantiation issue
       const { data: clientsData, error: clientsError } = await supabase
@@ -153,6 +170,34 @@ const Dashboard = () => {
       // Total balance includes client income
       const totalBalance = totalIncome - totalExpense + monthlyClientIncome;
       
+      // Calculate payment statistics
+      const now = new Date();
+      
+      // Payments that have been received/completed
+      const paymentsReceived = allPayments
+        ? allPayments.filter(payment => payment.status === 'completed').reduce((sum, payment) => sum + Number(payment.value), 0)
+        : 0;
+      
+      // Payments that are pending and not yet due
+      const pendingPayments = allPayments
+        ? allPayments
+            .filter(payment => 
+              payment.status === 'pending' && 
+              new Date(payment.due_date) >= now
+            )
+            .reduce((sum, payment) => sum + Number(payment.value), 0)
+        : 0;
+      
+      // Payments that are overdue (past due date and still pending)
+      const overduePayments = allPayments
+        ? allPayments
+            .filter(payment => 
+              payment.status === 'pending' && 
+              new Date(payment.due_date) < now
+            )
+            .reduce((sum, payment) => sum + Number(payment.value), 0)
+        : 0;
+      
       // Update financial data state with properly typed data
       setFinancialData({
         totalBalance,
@@ -164,7 +209,10 @@ const Dashboard = () => {
         activeClients: activeClients.length,
         taxPayable,
         upcomingPayments: upcomingPayments as Payment[] || [],
-        clientsIncome: monthlyClientIncome
+        clientsIncome: monthlyClientIncome,
+        paymentsReceived,
+        pendingPayments,
+        overduePayments
       });
     } catch (error: any) {
       console.error('Error fetching financial data:', error);
@@ -239,6 +287,54 @@ const Dashboard = () => {
               subtitle="Meta de economia"
               icon="savings"
             />
+          </div>
+
+          {/* New section for payment status cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg text-gray-300 font-normal">Recebidos</h3>
+                <div className="h-14 w-14 rounded-full bg-fin-green/20 flex items-center justify-center">
+                  <CheckCircle className="h-7 w-7 text-fin-green" />
+                </div>
+              </div>
+              <div className="text-4xl font-bold text-white mb-3">
+                {formatCurrency(financialData.paymentsReceived)}
+              </div>
+              <div className="flex items-center text-sm">
+                <span className="text-gray-400">Pagamentos concluídos</span>
+              </div>
+            </div>
+            
+            <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg text-gray-300 font-normal">Aguardando</h3>
+                <div className="h-14 w-14 rounded-full bg-[#FEC6A1]/20 flex items-center justify-center">
+                  <Clock className="h-7 w-7 text-[#FEC6A1]" />
+                </div>
+              </div>
+              <div className="text-4xl font-bold text-white mb-3">
+                {formatCurrency(financialData.pendingPayments)}
+              </div>
+              <div className="flex items-center text-sm">
+                <span className="text-gray-400">Pagamentos pendentes</span>
+              </div>
+            </div>
+            
+            <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg text-gray-300 font-normal">Em Atraso</h3>
+                <div className="h-14 w-14 rounded-full bg-fin-red/20 flex items-center justify-center">
+                  <AlertCircle className="h-7 w-7 text-fin-red" />
+                </div>
+              </div>
+              <div className="text-4xl font-bold text-white mb-3">
+                {formatCurrency(financialData.overduePayments)}
+              </div>
+              <div className="flex items-center text-sm">
+                <span className="text-fin-red">Pagamentos vencidos</span>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
