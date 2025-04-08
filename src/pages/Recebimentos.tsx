@@ -403,7 +403,7 @@ const Recebimentos = () => {
         console.error('Error fetching payments:', error);
       }
       
-      const formattedTransactions = typedTransactions.map((item) => {
+      let formattedTransactions = typedTransactions.map((item) => {
         const client = item.client_id ? clientsMap.get(item.client_id) : null;
         
         return {
@@ -445,7 +445,7 @@ const Recebimentos = () => {
         };
       });
       
-      const allReceipts = [...formattedTransactions, ...formattedPayments];
+      let allReceipts = [...formattedTransactions, ...formattedPayments];
       
       if (filterSource) {
         allReceipts = allReceipts.filter(receipt => receipt.source === filterSource);

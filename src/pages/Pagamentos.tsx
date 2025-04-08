@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   CreditCard, 
@@ -970,6 +969,7 @@ const Pagamentos = () => {
               setDateRange(range);
               setDateFilterMode("custom");
             }}
+            currentDate={currentDate}
           />
         </div>
         
