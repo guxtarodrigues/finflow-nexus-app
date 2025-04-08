@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { MetricCard } from "@/components/dashboard/MetricCard";
@@ -207,6 +208,8 @@ const Dashboard = () => {
       const taxPayable = (totalIncome + monthlyClientIncome) * 0.06;
       
       const totalBalance = totalIncome - totalExpense + monthlyClientIncome;
+      
+      const now = new Date(); // Defining the 'now' variable that was missing
       
       const paymentsReceived = allPayments
         ? allPayments.filter(payment => payment.status === 'completed').reduce((sum, payment) => sum + Number(payment.value), 0)
