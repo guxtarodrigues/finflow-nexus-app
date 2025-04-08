@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, Loader2 } from "lucide-react";
+import { Trash2, Loader2, ArrowUp, ArrowDown } from "lucide-react";
 
 interface Transaction {
   id: string;
@@ -38,6 +38,7 @@ export const TransactionList = ({
       <Table>
         <TableHeader className="bg-[#1F1F23]">
           <TableRow className="hover:bg-[#2A2A2E] border-[#2A2A2E]">
+            <TableHead className="w-[50px]">Tipo</TableHead>
             <TableHead className="w-[100px]">Data</TableHead>
             <TableHead>Descrição</TableHead>
             <TableHead>Categoria</TableHead>
@@ -48,7 +49,7 @@ export const TransactionList = ({
         <TableBody>
           {loading ? (
             <TableRow>
-              <TableCell colSpan={5} className="h-24 text-center">
+              <TableCell colSpan={6} className="h-24 text-center">
                 <div className="flex justify-center items-center">
                   <Loader2 className="h-6 w-6 text-fin-green animate-spin mr-2" />
                   <span>Carregando transações...</span>
@@ -57,13 +58,24 @@ export const TransactionList = ({
             </TableRow>
           ) : transactions.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                 Nenhuma transação encontrada.
               </TableCell>
             </TableRow>
           ) : (
             transactions.map((transaction) => (
               <TableRow key={transaction.id} className="hover:bg-[#1F1F23] border-[#2A2A2E]">
+                <TableCell>
+                  {transaction.type === "income" ? (
+                    <div className="flex items-center justify-center bg-green-500/10 rounded-full w-8 h-8">
+                      <ArrowUp className="h-5 w-5 text-green-500" />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center bg-red-500/10 rounded-full w-8 h-8">
+                      <ArrowDown className="h-5 w-5 text-red-500" />
+                    </div>
+                  )}
+                </TableCell>
                 <TableCell className="font-medium">{transaction.date}</TableCell>
                 <TableCell>{transaction.description}</TableCell>
                 <TableCell>
