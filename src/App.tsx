@@ -16,6 +16,15 @@ import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 
+// New page imports
+import Analises from "./pages/Analises";
+import Relatorios from "./pages/Relatorios";
+import Previsoes from "./pages/Previsoes";
+import Calendario from "./pages/Calendario";
+import Metas from "./pages/Metas";
+import Alertas from "./pages/Alertas";
+import Configuracoes from "./pages/Configuracoes";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -37,6 +46,15 @@ const App = () => (
                 <Route path="/categorias" element={<Categorias />} />
                 <Route path="/clientes" element={<Clientes />} />
                 <Route path="/investimentos" element={<Investimentos />} />
+                
+                {/* New routes */}
+                <Route path="/analises" element={<Analises />} />
+                <Route path="/relatorios" element={<Relatorios />} />
+                <Route path="/previsoes" element={<Previsoes />} />
+                <Route path="/calendario" element={<Calendario />} />
+                <Route path="/metas" element={<Metas />} />
+                <Route path="/alertas" element={<Alertas />} />
+                <Route path="/configuracoes" element={<Configuracoes />} />
               </Route>
             </Route>
             

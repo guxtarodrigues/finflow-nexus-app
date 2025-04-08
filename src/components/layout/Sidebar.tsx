@@ -1,3 +1,4 @@
+
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
@@ -5,7 +6,6 @@ import {
   ArrowLeftRight,
   CreditCard,
   Users,
-  Database,
   TrendingUp,
   PieChart,
   FileText,
@@ -14,6 +14,12 @@ import {
   CircleDollarSign,
   Clock,
   Database as CategoryIcon,
+  BarChart,
+  FileBarChart,
+  CalendarClock,
+  Target,
+  Bell,
+  ChevronRight,
 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
@@ -62,33 +68,15 @@ export const Sidebar = () => {
       ],
     },
     {
-      name: "Clientes",
-      path: "/clientes",
-      icon: <Users size={20} />,
-      expanded: false,
-    },
-    {
-      name: "Categorias",
-      path: "/categorias",
-      icon: <CategoryIcon size={20} />,
-      expanded: false,
-    },
-    {
-      name: "Investimentos",
-      path: "/investimentos",
-      icon: <CircleDollarSign size={20} />,
-      expanded: false,
-    },
-    {
       name: "Análises",
       path: "/analises",
-      icon: <TrendingUp size={20} />,
+      icon: <BarChart size={20} />,
       expanded: false,
     },
     {
       name: "Relatórios",
       path: "/relatorios",
-      icon: <FileText size={20} />,
+      icon: <FileBarChart size={20} />,
       expanded: false,
     },
     {
@@ -106,13 +94,13 @@ export const Sidebar = () => {
     {
       name: "Metas",
       path: "/metas",
-      icon: <PieChart size={20} />,
+      icon: <Target size={20} />,
       expanded: false,
     },
     {
       name: "Alertas",
       path: "/alertas",
-      icon: <Clock size={20} />,
+      icon: <Bell size={20} />,
       expanded: false,
     },
     {
