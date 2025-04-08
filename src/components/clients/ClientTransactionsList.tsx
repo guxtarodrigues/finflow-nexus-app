@@ -55,7 +55,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
         const processedTransactions: Transaction[] = [];
         
         originalTransactions.forEach(transaction => {
-          // Add the original transaction
+          // Add the original transaction with explicitly defined types
           processedTransactions.push({
             id: transaction.id,
             date: format(new Date(transaction.date), 'dd/MM/yyyy'),
@@ -64,8 +64,8 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             type: transaction.type,
             value: Number(transaction.value),
             status: transaction.status,
-            recurrence: transaction.recurrence || undefined,
-            recurrence_count: transaction.recurrence_count || undefined
+            recurrence: transaction.recurrence,
+            recurrence_count: transaction.recurrence_count
           });
           
           // If it's a recurring transaction, add future occurrences
