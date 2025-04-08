@@ -1,7 +1,7 @@
 
 import { useState } from "react";
 import { format, parse, addMonths, isSameDay } from "date-fns";
-import { ptBR } from "date-fns/locale/pt-BR";
+import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Repeat } from "lucide-react";
 
