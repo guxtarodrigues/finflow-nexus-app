@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   CreditCard, 
@@ -20,7 +19,10 @@ import {
   Users,
   Calendar,
   CalendarIcon,
-  Tag
+  Tag,
+  RefreshCw,
+  DollarSign,
+  CalendarCheck
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -151,6 +153,14 @@ const Pagamentos = () => {
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [isUpdateSheetOpen, setIsUpdateSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [dashboardData, setDashboardData] = useState({
+    totalPending: 0,
+    totalPaid: 0,
+    totalOverdue: 0,
+    totalRecurring: 0,
+    upcomingPayments: 0,
+    monthlyRecurringAmount: 0
+  });
   const { user } = useAuth();
   
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -182,6 +192,7 @@ const Pagamentos = () => {
       fetchPayments();
       fetchCategories();
       fetchClients();
+      calculateDashboardData();
     }
   }, [filterStatus, user, dateRange]);
 
@@ -327,6 +338,63 @@ const Pagamentos = () => {
     }
   };
 
+  const calculateDashboardData = async () => {
+    try {
+      if (!user) return;
+
+      const { data: allPayments, error } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      if (!allPayments) return;
+
+      const pendingPayments = allPayments.filter(payment => payment.status === 'pending');
+      const paidPayments = allPayments.filter(payment => payment.status === 'completed');
+      const overduePayments = allPayments.filter(payment => payment.status === 'overdue');
+      const recurringPayments = allPayments.filter(payment => 
+        payment.recurrence === 'Mensal' || 
+        payment.recurrence === 'Trimestral' || 
+        payment.recurrence === 'Anual'
+      );
+
+      const totalPending = pendingPayments.reduce((sum, payment) => sum + Number(payment.value), 0);
+      const totalPaid = paidPayments.reduce((sum, payment) => sum + Number(payment.value), 0);
+      const totalOverdue = overduePayments.reduce((sum, payment) => sum + Number(payment.value), 0);
+      
+      const monthlyRecurring = recurringPayments
+        .filter(payment => payment.recurrence === 'Mensal')
+        .reduce((sum, payment) => sum + Number(payment.value), 0);
+      
+      const today = new Date();
+      const nextWeek = new Date();
+      nextWeek.setDate(today.getDate() + 7);
+      
+      const upcomingPayments = pendingPayments.filter(payment => {
+        const paymentDate = new Date(payment.due_date);
+        return paymentDate >= today && paymentDate <= nextWeek;
+      }).length;
+
+      setDashboardData({
+        totalPending,
+        totalPaid,
+        totalOverdue,
+        totalRecurring: recurringPayments.length,
+        upcomingPayments,
+        monthlyRecurringAmount: monthlyRecurring
+      });
+    } catch (error: any) {
+      console.error('Error calculating dashboard data:', error);
+      toast({
+        title: "Erro ao calcular dados do dashboard",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleClientChange = (clientId: string) => {
     const selectedClient = clients.find(client => client.id === clientId);
     if (selectedClient) {
@@ -400,6 +468,13 @@ const Pagamentos = () => {
         variant: "destructive"
       });
     }
+  };
+
+  const formatCurrency = (value: number) => {
+    return value.toLocaleString('pt-BR', { 
+      style: 'currency', 
+      currency: 'BRL' 
+    });
   };
 
   return (
@@ -653,6 +728,82 @@ const Pagamentos = () => {
         </div>
       </div>
       
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">
+              <div className="flex items-center">
+                <div className="mr-2 p-2 bg-amber-500/10 rounded">
+                  <Clock className="h-4 w-4 text-amber-500" />
+                </div>
+                Pagamentos Pendentes
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalPending)}</div>
+            <p className="text-xs text-muted-foreground">
+              {payments.filter(p => p.status === 'pending').length} pagamentos pendentes
+            </p>
+            <div className="mt-4">
+              <span className="text-xs font-medium inline-flex items-center">
+                <CalendarCheck className="h-3 w-3 mr-1" /> {dashboardData.upcomingPayments} pagamentos nos próximos 7 dias
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">
+              <div className="flex items-center">
+                <div className="mr-2 p-2 bg-fin-green/10 rounded">
+                  <Check className="h-4 w-4 text-fin-green" />
+                </div>
+                Pagamentos Realizados
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalPaid)}</div>
+            <p className="text-xs text-muted-foreground">
+              {payments.filter(p => p.status === 'completed').length} pagamentos realizados no mês
+            </p>
+            <div className="mt-4">
+              <span className="text-xs font-medium inline-flex items-center">
+                <DollarSign className="h-3 w-3 mr-1" /> {formatCurrency(dashboardData.totalPaid / (payments.filter(p => p.status === 'completed').length || 1))} valor médio por pagamento
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">
+              <div className="flex items-center">
+                <div className="mr-2 p-2 bg-blue-500/10 rounded">
+                  <RefreshCw className="h-4 w-4 text-blue-500" />
+                </div>
+                Pagamentos Recorrentes
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(dashboardData.monthlyRecurringAmount)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {dashboardData.totalRecurring} pagamentos recorrentes ativos
+            </p>
+            <div className="mt-4">
+              <span className="text-xs font-medium inline-flex items-center">
+                <Repeat className="h-3 w-3 mr-1" /> Despesa mensal estimada com recorrentes
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-2 w-full md:w-auto">
           <DateFilter 
@@ -720,6 +871,7 @@ const Pagamentos = () => {
           <TabsTrigger value="pending">Pendentes</TabsTrigger>
           <TabsTrigger value="overdue">Atrasados</TabsTrigger>
           <TabsTrigger value="completed">Pagos</TabsTrigger>
+          <TabsTrigger value="recurring">Recorrentes</TabsTrigger>
         </TabsList>
         
         <TabsContent value="all" className="space-y-4">
@@ -812,6 +964,76 @@ const Pagamentos = () => {
         
         <TabsContent value="completed" className="space-y-4">
           {/* Similar content as "all" tab but filtered for completed */}
+        </TabsContent>
+        
+        <TabsContent value="recurring" className="space-y-4">
+          <Card>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="flex justify-center items-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : payments.filter(p => 
+                  p.recurrence === "Mensal" || 
+                  p.recurrence === "Trimestral" || 
+                  p.recurrence === "Anual"
+                ).length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Nenhum pagamento recorrente encontrado.</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Destinatário</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Recorrência</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {payments
+                      .filter(payment => 
+                        (payment.recurrence === "Mensal" || 
+                         payment.recurrence === "Trimestral" || 
+                         payment.recurrence === "Anual") &&
+                        payment.description.toLowerCase().includes(searchTerm.toLowerCase())
+                      )
+                      .map(payment => (
+                        <TableRow key={payment.id}>
+                          <TableCell className="font-medium">{payment.description}</TableCell>
+                          <TableCell>{payment.recipient}</TableCell>
+                          <TableCell>{payment.due_date}</TableCell>
+                          <TableCell>
+                            {Number(payment.value).toLocaleString('pt-BR', { 
+                              style: 'currency', 
+                              currency: 'BRL' 
+                            })}
+                          </TableCell>
+                          <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                          <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setSelectedPayment(payment);
+                                setIsUpdateSheetOpen(true);
+                              }}
+                            >
+                              <ArrowRight className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
       
@@ -971,14 +1193,12 @@ const Pagamentos = () => {
                     try {
                       if (!user || !selectedPayment) return;
                       
-                      // Get the previous status to check if it was changed to completed
                       const { data: previousData } = await supabase
                         .from('payments')
                         .select('status')
                         .eq('id', selectedPayment.id)
                         .single();
                       
-                      // Update the payment
                       const { error } = await supabase
                         .from('payments')
                         .update({
@@ -994,7 +1214,6 @@ const Pagamentos = () => {
                       
                       if (error) throw error;
                       
-                      // If the status was changed to completed, create a transaction
                       if (previousData && previousData.status !== 'completed' && selectedPayment.status === 'completed') {
                         let categoryData = null;
                         if (selectedPayment.category_id) {
