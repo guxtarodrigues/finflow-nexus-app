@@ -10,8 +10,8 @@ import { useNavigate } from "react-router-dom";
 import { startOfMonth, endOfMonth, format, addMonths, subMonths, isAfter, isBefore, parseISO, isEqual } from "date-fns";
 import { Client } from "@/types/clients";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BalanceVsExpensesChart } from "@/components/dashboard/BalanceVsExpensesChart";
 
-// Define a more specific type for payments to avoid deep instantiation
 interface Payment {
   id: string;
   description: string;
@@ -22,7 +22,6 @@ interface Payment {
   status: string;
 }
 
-// Define specific type for financial data to avoid deep instantiation
 interface FinancialData {
   totalBalance: number;
   monthlyIncome: number;
@@ -70,7 +69,6 @@ const Dashboard = () => {
     try {
       setLoading(true);
       
-      // Get the current month dates
       const currentMonthStart = startOfMonth(new Date());
       const currentMonthEnd = endOfMonth(new Date());
       const nextMonthStart = startOfMonth(addMonths(new Date(), 1));
@@ -78,7 +76,6 @@ const Dashboard = () => {
       const prevMonthStart = startOfMonth(subMonths(new Date(), 1));
       const prevMonthEnd = endOfMonth(subMonths(new Date(), 1));
       
-      // Fetch transactions
       const { data: transactions, error: transactionsError } = await supabase
         .from('transactions')
         .select('*')
@@ -86,7 +83,6 @@ const Dashboard = () => {
       
       if (transactionsError) throw transactionsError;
       
-      // Fetch upcoming payments
       const { data: originalPayments, error: paymentsError } = await supabase
         .from('payments')
         .select('*')
@@ -95,22 +91,15 @@ const Dashboard = () => {
       
       if (paymentsError) throw paymentsError;
       
-      // Process recurring payments to include future months instances
       let processedPayments: Payment[] = [];
       
-      // Only proceed if we have original payments data
       if (originalPayments && originalPayments.length > 0) {
-        // Get current date for comparison
         const currentDate = new Date();
         
-        // Process each payment
         originalPayments.forEach(payment => {
-          // Add the original payment
           processedPayments.push(payment as Payment);
           
-          // Calculate future occurrences for recurring payments
           if (payment.recurrence && payment.recurrence !== 'once') {
-            // Determine number of months to add based on recurrence type
             const getMonthsToAdd = (recurrenceType: string) => {
               switch (recurrenceType) {
                 case 'monthly': return 1;
@@ -124,35 +113,31 @@ const Dashboard = () => {
             
             const monthsToAdd = getMonthsToAdd(payment.recurrence);
             
-            // Number of occurrences based on recurrence type
-            // This is a simple approximation, could be made more sophisticated
             const getOccurrences = (recurrenceType: string) => {
               switch (recurrenceType) {
-                case 'monthly': return 12; // Show for a year
-                case 'bimonthly': return 6; // Show for a year
-                case 'quarterly': return 4; // Show for a year
-                case 'biannual': return 2; // Show for a year
-                case 'annual': return 1; // Show for a year
+                case 'monthly': return 12;
+                case 'bimonthly': return 6;
+                case 'quarterly': return 4;
+                case 'biannual': return 2;
+                case 'annual': return 1;
                 default: return 0;
               }
             };
             
             const occurrences = getOccurrences(payment.recurrence);
             
-            // Generate future instances
             if (monthsToAdd > 0) {
               const dueDate = new Date(payment.due_date);
               
               for (let i = 1; i <= occurrences; i++) {
                 const futureDueDate = addMonths(dueDate, monthsToAdd * i);
                 
-                // Only add future instances
                 if (isAfter(futureDueDate, currentDate)) {
                   processedPayments.push({
                     ...payment,
-                    id: `${payment.id}-occurrence-${i}`, // Generate unique ID for the occurrence
+                    id: `${payment.id}-occurrence-${i}`,
                     due_date: futureDueDate.toISOString(),
-                    status: 'pending', // Future occurrences are always pending
+                    status: 'pending'
                   } as Payment);
                 }
               }
@@ -161,16 +146,13 @@ const Dashboard = () => {
         });
       }
       
-      // Filter to just show the upcoming 5 payments
       const upcomingPayments = processedPayments
         .filter(payment => payment.status === 'pending')
         .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
         .slice(0, 5);
       
-      // Fetch all payments to calculate statistics (using processed payments to include recurring ones)
       const allPayments = processedPayments;
       
-      // Fetch active clients - Fix for type instantiation issue
       const { data: clientsData, error: clientsError } = await supabase
         .from('clients')
         .select('*')
@@ -178,11 +160,9 @@ const Dashboard = () => {
       
       if (clientsError) throw clientsError;
       
-      // Type casting to ensure proper type handling
       const clients = clientsData as Client[] || [];
       const activeClients = clients.filter(client => client.status === 'active');
       
-      // Calculate financial metrics
       const currentMonthTransactions = transactions?.filter(tx => {
         const txDate = new Date(tx.date);
         return txDate >= currentMonthStart && txDate <= currentMonthEnd;
@@ -202,9 +182,6 @@ const Dashboard = () => {
       const totalIncome = incomeTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
       const totalExpense = expenseTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
       
-      // Calculate clients income (recurring payments)
-      const currentDate = new Date();
-      
       const monthlyClientIncome = activeClients
         .filter(client => 
           client.recurring_payment && 
@@ -213,15 +190,12 @@ const Dashboard = () => {
         )
         .reduce((sum, client) => sum + (client.monthly_value || 0), 0);
       
-      // Calculate yearly forecast based on transactions and client contracts
       const yearlyTransactionsForecast = (totalIncome / 12) * 12 - (totalExpense / 12) * 12;
       const yearlyClientsIncome = monthlyClientIncome * 12;
       const yearlyForecast = yearlyTransactionsForecast + yearlyClientsIncome;
       
-      // Calculate next month forecast
       const nextMonthClientsIncome = activeClients
         .filter(client => {
-          // Include if client is active, has recurring payment, and contract covers next month
           return client.recurring_payment && 
                  client.monthly_value && 
                  (!client.contract_end || new Date(client.contract_end) >= nextMonthEnd);
@@ -230,22 +204,14 @@ const Dashboard = () => {
       
       const nextMonthForecast = currentMonthIncome + nextMonthClientsIncome - currentMonthExpense;
       
-      // Calculate tax (6% of income)
       const taxPayable = (totalIncome + monthlyClientIncome) * 0.06;
       
-      // Total balance includes client income
       const totalBalance = totalIncome - totalExpense + monthlyClientIncome;
       
-      // Calculate payment statistics
-      const now = new Date();
-      
-      // Process statistics for all payments (including recurring ones)
-      // Payments that have been received/completed
       const paymentsReceived = allPayments
         ? allPayments.filter(payment => payment.status === 'completed').reduce((sum, payment) => sum + Number(payment.value), 0)
         : 0;
       
-      // Payments that are pending and not yet due
       const pendingPayments = allPayments
         ? allPayments
             .filter(payment => 
@@ -255,7 +221,6 @@ const Dashboard = () => {
             .reduce((sum, payment) => sum + Number(payment.value), 0)
         : 0;
       
-      // Payments that are overdue (past due date and still pending)
       const overduePayments = allPayments
         ? allPayments
             .filter(payment => 
@@ -265,12 +230,11 @@ const Dashboard = () => {
             .reduce((sum, payment) => sum + Number(payment.value), 0)
         : 0;
       
-      // Update financial data state with properly typed data
       setFinancialData({
         totalBalance,
         monthlyIncome: currentMonthIncome + monthlyClientIncome,
         monthlyExpense: currentMonthExpense,
-        totalSavings: totalBalance * 0.2, // Assuming 20% of net income is saved
+        totalSavings: totalBalance * 0.2,
         yearlyForecast,
         nextMonthForecast,
         activeClients: activeClients.length,
@@ -356,7 +320,17 @@ const Dashboard = () => {
             />
           </div>
 
-          {/* New section for payment status cards */}
+          <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
+            <div className="mb-4">
+              <h3 className="text-lg text-gray-300 font-normal">Saldo Total vs Despesas</h3>
+              <p className="text-sm text-gray-400">Comparativo entre saldo e despesas</p>
+            </div>
+            <BalanceVsExpensesChart 
+              totalBalance={financialData.totalBalance} 
+              totalExpenses={financialData.monthlyExpense}
+            />
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
               <div className="flex justify-between items-center mb-4">
