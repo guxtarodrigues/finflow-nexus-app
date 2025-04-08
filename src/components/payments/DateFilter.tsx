@@ -1,6 +1,5 @@
-
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { pt } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
@@ -33,9 +32,9 @@ export const DateFilter = ({
   const formatDateRange = () => {
     if (dateFilterMode === "current" || dateFilterMode === "prev" || dateFilterMode === "next") {
       // Use currentDate for displaying the month name in the selector with Portuguese locale
-      return `${format(currentDate, 'MMMM yyyy', { locale: ptBR })}`;
+      return `${format(currentDate, 'MMMM yyyy', { locale: pt })}`;
     } else {
-      return `${format(dateRange.from, 'dd/MM/yyyy', { locale: ptBR })} - ${format(dateRange.to, 'dd/MM/yyyy', { locale: ptBR })}`;
+      return `${format(dateRange.from, 'dd/MM/yyyy', { locale: pt })} - ${format(dateRange.to, 'dd/MM/yyyy', { locale: pt })}`;
     }
   };
 
@@ -78,7 +77,7 @@ export const DateFilter = ({
             }}
             numberOfMonths={2}
             className="p-3 pointer-events-auto"
-            locale={ptBR}
+            locale={pt}
           />
         </PopoverContent>
       </Popover>
