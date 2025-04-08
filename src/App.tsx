@@ -24,6 +24,7 @@ import Calendario from "./pages/Calendario";
 import Metas from "./pages/Metas";
 import Alertas from "./pages/Alertas";
 import Configuracoes from "./pages/Configuracoes";
+import Recebimentos from "./pages/Recebimentos";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,7 @@ const App = () => (
                 <Route path="/categorias" element={<Categorias />} />
                 <Route path="/clientes" element={<Clientes />} />
                 <Route path="/investimentos" element={<Investimentos />} />
+                <Route path="/recebimentos" element={<Recebimentos />} />
                 
                 {/* New routes */}
                 <Route path="/analises" element={<Analises />} />

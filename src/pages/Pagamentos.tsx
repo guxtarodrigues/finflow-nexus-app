@@ -22,7 +22,9 @@ import {
   Tag,
   RefreshCw,
   DollarSign,
-  CalendarCheck
+  CalendarCheck,
+  Edit,
+  CheckCircle
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -184,6 +186,13 @@ const Pagamentos = () => {
     recurrence: "Mensal",
     status: "pending"
   });
+  
+  const [formErrors, setFormErrors] = useState<{
+    description?: boolean;
+    recipient?: boolean;
+    value?: boolean;
+    due_date?: boolean;
+  }>({});
   
   const { toast } = useToast();
 
@@ -415,14 +424,29 @@ const Pagamentos = () => {
     try {
       if (!user) return;
       
-      if (!newPayment.description || !newPayment.recipient || !newPayment.value || !newPayment.due_date) {
+      const errors: {
+        description?: boolean;
+        recipient?: boolean;
+        value?: boolean;
+        due_date?: boolean;
+      } = {};
+      
+      if (!newPayment.description) errors.description = true;
+      if (!newPayment.recipient) errors.recipient = true;
+      if (!newPayment.value) errors.value = true;
+      if (!newPayment.due_date) errors.due_date = true;
+      
+      if (Object.keys(errors).length > 0) {
+        setFormErrors(errors);
         toast({
           title: "Campos obrigatórios",
-          description: "Preencha todos os campos para continuar.",
+          description: "Preencha todos os campos destacados em vermelho para continuar.",
           variant: "destructive"
         });
         return;
       }
+      
+      setFormErrors({});
       
       const { error } = await supabase
         .from('payments')
@@ -460,10 +484,90 @@ const Pagamentos = () => {
       
       setIsDialogOpen(false);
       fetchPayments();
+      calculateDashboardData();
     } catch (error: any) {
       console.error('Error adding payment:', error);
       toast({
         title: "Erro ao adicionar pagamento",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+  
+  const handleMarkAsPaid = async (paymentId: string) => {
+    try {
+      if (!user) return;
+      
+      const { data: previousData } = await supabase
+        .from('payments')
+        .select('status, description, category_id, value')
+        .eq('id', paymentId)
+        .single();
+      
+      if (!previousData) {
+        toast({
+          title: "Erro",
+          description: "Pagamento não encontrado",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      if (previousData.status === 'completed') {
+        toast({
+          title: "Informação",
+          description: "Este pagamento já está marcado como pago",
+        });
+        return;
+      }
+      
+      const { error } = await supabase
+        .from('payments')
+        .update({
+          status: 'completed'
+        })
+        .eq('id', paymentId);
+      
+      if (error) throw error;
+      
+      // Create transaction record for the payment
+      let categoryData = null;
+      if (previousData.category_id) {
+        const { data } = await supabase
+          .from('categories')
+          .select('name')
+          .eq('id', previousData.category_id)
+          .single();
+        
+        categoryData = data;
+      }
+      
+      const { error: transactionError } = await supabase
+        .from('transactions')
+        .insert({
+          user_id: user.id,
+          description: `Pagamento: ${previousData.description}`,
+          category: categoryData ? categoryData.name : 'Pagamentos',
+          category_id: previousData.category_id,
+          value: previousData.value,
+          type: 'expense',
+          date: new Date().toISOString(),
+          status: 'completed'
+        });
+      
+      if (transactionError) throw transactionError;
+      
+      toast({
+        title: "Pagamento atualizado",
+        description: "O pagamento foi marcado como pago com sucesso.",
+      });
+      
+      fetchPayments();
+      calculateDashboardData();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao atualizar pagamento",
         description: error.message,
         variant: "destructive"
       });
@@ -504,25 +608,42 @@ const Pagamentos = () => {
               <div className="grid gap-6 py-4">
                 <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="description">Descrição</Label>
+                    <Label htmlFor="description" className={formErrors.description ? "text-fin-red" : ""}>Descrição *</Label>
                     <Input
                       id="description"
                       placeholder="Ex: Aluguel, Conta de luz, etc."
-                      className="bg-[#1F1F23] border-[#2A2A2E]"
+                      className={cn(
+                        "bg-[#1F1F23] border-[#2A2A2E]",
+                        formErrors.description ? "border-fin-red focus-visible:ring-fin-red" : ""
+                      )}
                       value={newPayment.description}
-                      onChange={(e) => setNewPayment({...newPayment, description: e.target.value})}
+                      onChange={(e) => {
+                        setNewPayment({...newPayment, description: e.target.value});
+                        if (e.target.value) {
+                          setFormErrors({...formErrors, description: false});
+                        }
+                      }}
                     />
+                    {formErrors.description && (
+                      <p className="text-fin-red text-xs">Este campo é obrigatório</p>
+                    )}
                   </div>
                   
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-1">
-                      <Users className="h-4 w-4" /> Destinatário
+                    <Label className={cn(
+                      "flex items-center gap-1",
+                      formErrors.recipient ? "text-fin-red" : ""
+                    )}>
+                      <Users className="h-4 w-4" /> Destinatário *
                     </Label>
                     <Select
                       value={newPayment.client_id}
                       onValueChange={handleClientChange}
                     >
-                      <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
+                      <SelectTrigger className={cn(
+                    "bg-[#1F1F23] border-[#2A2A2E]",
+                    formErrors.recipient ? "border-fin-red focus-visible:ring-fin-red" : ""
+                  )}>
                         <SelectValue placeholder="Selecione um cliente ou digite manualmente" />
                       </SelectTrigger>
                       <SelectContent>
@@ -546,11 +667,22 @@ const Pagamentos = () => {
                     </Select>
                     {!newPayment.client_id && (
                       <Input
-                        className="mt-2 bg-[#1F1F23] border-[#2A2A2E]"
+                        className={cn(
+                          "mt-2 bg-[#1F1F23] border-[#2A2A2E]",
+                          formErrors.recipient ? "border-fin-red focus-visible:ring-fin-red" : ""
+                        )}
                         placeholder="Ou digite o nome do destinatário"
                         value={newPayment.recipient}
-                        onChange={(e) => setNewPayment({...newPayment, recipient: e.target.value})}
+                        onChange={(e) => {
+                          setNewPayment({...newPayment, recipient: e.target.value});
+                          if (e.target.value) {
+                            setFormErrors({...formErrors, recipient: false});
+                          }
+                        }}
                       />
+                    )}
+                    {formErrors.recipient && (
+                      <p className="text-fin-red text-xs">Este campo é obrigatório</p>
                     )}
                   </div>
                   
@@ -591,20 +723,31 @@ const Pagamentos = () => {
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="value">Valor</Label>
+                      <Label htmlFor="value" className={formErrors.value ? "text-fin-red" : ""}>Valor *</Label>
                       <Input
                         id="value"
                         type="number"
                         step="0.01"
                         min="0"
                         placeholder="0,00"
-                        className="bg-[#1F1F23] border-[#2A2A2E]"
+                        className={cn(
+                          "bg-[#1F1F23] border-[#2A2A2E]",
+                          formErrors.value ? "border-fin-red focus-visible:ring-fin-red" : ""
+                        )}
                         value={newPayment.value}
-                        onChange={(e) => setNewPayment({...newPayment, value: e.target.value})}
+                        onChange={(e) => {
+                          setNewPayment({...newPayment, value: e.target.value});
+                          if (e.target.value) {
+                            setFormErrors({...formErrors, value: false});
+                          }
+                        }}
                       />
+                      {formErrors.value && (
+                        <p className="text-fin-red text-xs">Este campo é obrigatório</p>
+                      )}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="due_date">Data de Vencimento</Label>
+                      <Label htmlFor="due_date" className={formErrors.due_date ? "text-fin-red" : ""}>Data de Vencimento *</Label>
                       <div className="relative">
                         <Popover>
                           <PopoverTrigger asChild>
@@ -612,7 +755,8 @@ const Pagamentos = () => {
                               variant="outline"
                               className={cn(
                                 "w-full justify-start text-left font-normal bg-[#1F1F23] border-[#2A2A2E]",
-                                !newPayment.due_date && "text-muted-foreground"
+                                !newPayment.due_date && "text-muted-foreground",
+                                formErrors.due_date ? "border-fin-red focus-visible:ring-fin-red" : ""
                               )}
                             >
                               <CalendarIcon className="mr-2 h-4 w-4" />
@@ -623,15 +767,23 @@ const Pagamentos = () => {
                             <CalendarComponent
                               mode="single"
                               selected={newPayment.due_date ? new Date(newPayment.due_date) : undefined}
-                              onSelect={(date) => date && setNewPayment({
-                                ...newPayment, 
-                                due_date: format(date, "yyyy-MM-dd")
-                              })}
+                              onSelect={(date) => {
+                                if (date) {
+                                  setNewPayment({
+                                    ...newPayment, 
+                                    due_date: format(date, "yyyy-MM-dd")
+                                  });
+                                  setFormErrors({...formErrors, due_date: false});
+                                }
+                              }}
                               initialFocus
                             />
                           </PopoverContent>
                         </Popover>
                       </div>
+                      {formErrors.due_date && (
+                        <p className="text-fin-red text-xs">Este campo é obrigatório</p>
+                      )}
                     </div>
                   </div>
                   
@@ -694,7 +846,10 @@ const Pagamentos = () => {
               <DialogFooter>
                 <Button 
                   variant="outline" 
-                  onClick={() => setIsDialogOpen(false)}
+                  onClick={() => {
+                    setIsDialogOpen(false);
+                    setFormErrors({});
+                  }}
                 >
                   Cancelar
                 </Button>
@@ -779,494 +934,4 @@ const Pagamentos = () => {
         
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              <div className="flex items-center">
-                <div className="mr-2 p-2 bg-blue-500/10 rounded">
-                  <RefreshCw className="h-4 w-4 text-blue-500" />
-                </div>
-                Pagamentos Recorrentes
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(dashboardData.monthlyRecurringAmount)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {dashboardData.totalRecurring} pagamentos recorrentes ativos
-            </p>
-            <div className="mt-4">
-              <span className="text-xs font-medium inline-flex items-center">
-                <Repeat className="h-3 w-3 mr-1" /> Despesa mensal estimada com recorrentes
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <DateFilter 
-            dateRange={dateRange}
-            dateFilterMode={dateFilterMode}
-            onPrevMonth={() => setDateFilterMode("prev")}
-            onNextMonth={() => setDateFilterMode("next")}
-            onCurrentMonth={() => setDateFilterMode("current")}
-            onDateRangeChange={(range) => {
-              setDateRange(range);
-              setDateFilterMode("custom");
-            }}
-          />
-        </div>
-        
-        <div className="flex gap-2 w-full md:w-auto">
-          <div className="relative flex-1 md:flex-auto">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Buscar pagamentos..."
-              className="pl-8 w-full md:w-[250px]"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-1">
-                <Filter className="h-4 w-4" />
-                <span className="hidden sm:inline">Filtrar</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setFilterStatus(null)}>
-                Todos
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterStatus("pending")}>
-                Pendentes
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterStatus("completed")}>
-                Pagos
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterStatus("overdue")}>
-                Atrasados
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
-          <Button
-            variant="outline"
-            className="aspect-square p-2"
-            onClick={() => setViewMode(viewMode === "list" ? "calendar" : "list")}
-            title={viewMode === "list" ? "Visualizar como calendário" : "Visualizar como lista"}
-          >
-            {viewMode === "list" ? <CalendarDays className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
-          </Button>
-        </div>
-      </div>
-      
-      <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="mb-4">
-          <TabsTrigger value="all">Todos</TabsTrigger>
-          <TabsTrigger value="pending">Pendentes</TabsTrigger>
-          <TabsTrigger value="overdue">Atrasados</TabsTrigger>
-          <TabsTrigger value="completed">Pagos</TabsTrigger>
-          <TabsTrigger value="recurring">Recorrentes</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="all" className="space-y-4">
-          {viewMode === "list" ? (
-            <Card>
-              <CardContent className="p-0">
-                {loading ? (
-                  <div className="flex justify-center items-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  </div>
-                ) : payments.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground">Nenhum pagamento encontrado.</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Destinatário</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Recorrência</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {payments
-                        .filter(payment => {
-                          if (activeTab !== "all") {
-                            return payment.status === activeTab;
-                          }
-                          return payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                 payment.recipient.toLowerCase().includes(searchTerm.toLowerCase());
-                        })
-                        .map(payment => (
-                          <TableRow key={payment.id}>
-                            <TableCell className="font-medium">{payment.description}</TableCell>
-                            <TableCell>{payment.recipient}</TableCell>
-                            <TableCell>{payment.due_date}</TableCell>
-                            <TableCell>
-                              {payment.value.toLocaleString('pt-BR', { 
-                                style: 'currency', 
-                                currency: 'BRL' 
-                              })}
-                            </TableCell>
-                            <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                            <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setSelectedPayment(payment);
-                                  setIsUpdateSheetOpen(true);
-                                }}
-                              >
-                                <ArrowRight className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <PaymentCalendarView 
-              payments={payments.filter(payment => {
-                if (activeTab !== "all") {
-                  return payment.status === activeTab;
-                }
-                return payment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       payment.recipient.toLowerCase().includes(searchTerm.toLowerCase());
-              })} 
-              currentDate={currentDate} 
-            />
-          )}
-        </TabsContent>
-        
-        <TabsContent value="pending" className="space-y-4">
-          {/* Similar content as "all" tab but filtered for pending */}
-        </TabsContent>
-        
-        <TabsContent value="overdue" className="space-y-4">
-          {/* Similar content as "all" tab but filtered for overdue */}
-        </TabsContent>
-        
-        <TabsContent value="completed" className="space-y-4">
-          {/* Similar content as "all" tab but filtered for completed */}
-        </TabsContent>
-        
-        <TabsContent value="recurring" className="space-y-4">
-          <Card>
-            <CardContent className="p-0">
-              {loading ? (
-                <div className="flex justify-center items-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-              ) : payments.filter(p => 
-                  p.recurrence === "Mensal" || 
-                  p.recurrence === "Trimestral" || 
-                  p.recurrence === "Anual"
-                ).length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground">Nenhum pagamento recorrente encontrado.</p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Destinatário</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Recorrência</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payments
-                      .filter(payment => 
-                        (payment.recurrence === "Mensal" || 
-                         payment.recurrence === "Trimestral" || 
-                         payment.recurrence === "Anual") &&
-                        payment.description.toLowerCase().includes(searchTerm.toLowerCase())
-                      )
-                      .map(payment => (
-                        <TableRow key={payment.id}>
-                          <TableCell className="font-medium">{payment.description}</TableCell>
-                          <TableCell>{payment.recipient}</TableCell>
-                          <TableCell>{payment.due_date}</TableCell>
-                          <TableCell>
-                            {Number(payment.value).toLocaleString('pt-BR', { 
-                              style: 'currency', 
-                              currency: 'BRL' 
-                            })}
-                          </TableCell>
-                          <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                          <TableCell>{getRecurrenceBadge(payment.recurrence)}</TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setSelectedPayment(payment);
-                                setIsUpdateSheetOpen(true);
-                              }}
-                            >
-                              <ArrowRight className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-      
-      {/* Update Payment Sheet */}
-      <Sheet open={isUpdateSheetOpen && selectedPayment !== null} onOpenChange={setIsUpdateSheetOpen}>
-        <SheetContent className="sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Detalhes do Pagamento</SheetTitle>
-            <SheetDescription>
-              Visualize e atualize os detalhes do pagamento.
-            </SheetDescription>
-          </SheetHeader>
-          {selectedPayment && (
-            <div className="space-y-4 py-4">
-              <div className="grid gap-2">
-                <Label>Descrição</Label>
-                <Input
-                  value={selectedPayment.description}
-                  onChange={(e) => setSelectedPayment({...selectedPayment, description: e.target.value})}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Destinatário</Label>
-                <Input
-                  value={selectedPayment.recipient}
-                  onChange={(e) => setSelectedPayment({...selectedPayment, recipient: e.target.value})}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Categoria</Label>
-                <Select
-                  value={selectedPayment.category_id || ""}
-                  onValueChange={(value) => setSelectedPayment({...selectedPayment, category_id: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map(category => (
-                      <SelectItem key={category.id} value={category.id}>
-                        <div className="flex items-center">
-                          <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: category.color }} />
-                          {category.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Valor</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={selectedPayment.value}
-                    onChange={(e) => setSelectedPayment({...selectedPayment, value: parseFloat(e.target.value)})}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Data de Vencimento</Label>
-                  <Input
-                    type="text"
-                    value={selectedPayment.due_date}
-                    readOnly
-                  />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Status</Label>
-                <Select
-                  value={selectedPayment.status}
-                  onValueChange={(value) => setSelectedPayment({...selectedPayment, status: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pending">Pendente</SelectItem>
-                    <SelectItem value="completed">Pago</SelectItem>
-                    <SelectItem value="overdue">Atrasado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Método de Pagamento</Label>
-                  <Select
-                    value={selectedPayment.payment_method}
-                    onValueChange={(value) => setSelectedPayment({...selectedPayment, payment_method: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Transferência">Transferência</SelectItem>
-                      <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
-                      <SelectItem value="Boleto">Boleto</SelectItem>
-                      <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                      <SelectItem value="PIX">PIX</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Recorrência</Label>
-                  <Select
-                    value={selectedPayment.recurrence}
-                    onValueChange={(value) => setSelectedPayment({...selectedPayment, recurrence: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Único">Único</SelectItem>
-                      <SelectItem value="Mensal">Mensal</SelectItem>
-                      <SelectItem value="Trimestral">Trimestral</SelectItem>
-                      <SelectItem value="Anual">Anual</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex justify-between pt-4">
-                <Button
-                  variant="destructive"
-                  onClick={async () => {
-                    try {
-                      if (!user || !selectedPayment) return;
-                      
-                      const { error } = await supabase
-                        .from('payments')
-                        .delete()
-                        .eq('id', selectedPayment.id);
-                      
-                      if (error) throw error;
-                      
-                      toast({
-                        title: "Pagamento excluído",
-                        description: "O pagamento foi excluído com sucesso.",
-                      });
-                      
-                      setIsUpdateSheetOpen(false);
-                      fetchPayments();
-                    } catch (error: any) {
-                      toast({
-                        title: "Erro ao excluir pagamento",
-                        description: error.message,
-                        variant: "destructive"
-                      });
-                    }
-                  }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                </Button>
-                <Button
-                  onClick={async () => {
-                    try {
-                      if (!user || !selectedPayment) return;
-                      
-                      const { data: previousData } = await supabase
-                        .from('payments')
-                        .select('status')
-                        .eq('id', selectedPayment.id)
-                        .single();
-                      
-                      const { error } = await supabase
-                        .from('payments')
-                        .update({
-                          description: selectedPayment.description,
-                          recipient: selectedPayment.recipient,
-                          category_id: selectedPayment.category_id || null,
-                          value: selectedPayment.value,
-                          status: selectedPayment.status,
-                          payment_method: selectedPayment.payment_method,
-                          recurrence: selectedPayment.recurrence
-                        })
-                        .eq('id', selectedPayment.id);
-                      
-                      if (error) throw error;
-                      
-                      if (previousData && previousData.status !== 'completed' && selectedPayment.status === 'completed') {
-                        let categoryData = null;
-                        if (selectedPayment.category_id) {
-                          const { data } = await supabase
-                            .from('categories')
-                            .select('name')
-                            .eq('id', selectedPayment.category_id)
-                            .single();
-                          
-                          categoryData = data;
-                        }
-                        
-                        const { error: transactionError } = await supabase
-                          .from('transactions')
-                          .insert({
-                            user_id: user.id,
-                            description: `Pagamento: ${selectedPayment.description}`,
-                            category: categoryData ? categoryData.name : 'Pagamentos',
-                            category_id: selectedPayment.category_id,
-                            value: selectedPayment.value,
-                            type: 'expense',
-                            date: new Date().toISOString(),
-                            status: 'completed'
-                          });
-                        
-                        if (transactionError) throw transactionError;
-                      }
-                      
-                      toast({
-                        title: "Pagamento atualizado",
-                        description: "O pagamento foi atualizado com sucesso.",
-                      });
-                      
-                      setIsUpdateSheetOpen(false);
-                      fetchPayments();
-                    } catch (error: any) {
-                      toast({
-                        title: "Erro ao atualizar pagamento",
-                        description: error.message,
-                        variant: "destructive"
-                      });
-                    }
-                  }}
-                >
-                  Salvar alterações
-                </Button>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
-    </div>
-  );
-};
-
-export default Pagamentos;
+            <
