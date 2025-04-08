@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, Loader2, ArrowUp, ArrowDown, Check, Clock } from "lucide-react";
+import { Trash2, Loader2, ArrowUp, ArrowDown, Check, Clock, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -42,7 +42,7 @@ export const TransactionList = ({
   const [processingId, setProcessingId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const handleMarkAsReceived = async (id: string) => {
+  const handleMarkAsComplete = async (id: string) => {
     try {
       setProcessingId(id);
       
@@ -58,13 +58,13 @@ export const TransactionList = ({
       }
       
       toast({
-        title: "Recebimento confirmado",
-        description: "O recebimento foi marcado como recebido com sucesso",
+        title: "Status atualizado",
+        description: "A transação foi marcada como concluída com sucesso",
       });
     } catch (error: any) {
-      console.error('Error marking as received:', error);
+      console.error('Error marking as completed:', error);
       toast({
-        title: "Erro ao confirmar recebimento",
+        title: "Erro ao atualizar status",
         description: error.message,
         variant: "destructive"
       });
@@ -104,6 +104,58 @@ export const TransactionList = ({
     }
   };
 
+  const handleMarkAsOverdue = async (id: string) => {
+    try {
+      setProcessingId(id);
+      
+      const { error } = await supabase
+        .from('transactions')
+        .update({ status: 'overdue' })
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      if (onStatusChange) {
+        onStatusChange();
+      }
+      
+      toast({
+        title: "Status atualizado",
+        description: "A transação foi marcada como atrasada",
+      });
+    } catch (error: any) {
+      console.error('Error marking as overdue:', error);
+      toast({
+        title: "Erro ao atualizar status",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-500">
+          <Check className="h-3 w-3 mr-1" /> Concluído
+        </span>;
+      case 'pending':
+        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-500">
+          <Clock className="h-3 w-3 mr-1" /> Pendente
+        </span>;
+      case 'overdue':
+        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-500">
+          <AlertTriangle className="h-3 w-3 mr-1" /> Atrasado
+        </span>;
+      default:
+        return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-500">
+          {status}
+        </span>;
+    }
+  };
+
   return (
     <div className="rounded-md border border-[#2A2A2E]">
       <Table>
@@ -113,6 +165,7 @@ export const TransactionList = ({
             <TableHead className="w-[100px]">Data</TableHead>
             <TableHead>Descrição</TableHead>
             <TableHead>Categoria</TableHead>
+            <TableHead>Status</TableHead>
             <TableHead className="text-right">Valor</TableHead>
             <TableHead className="text-right">Ações</TableHead>
           </TableRow>
@@ -120,7 +173,7 @@ export const TransactionList = ({
         <TableBody>
           {loading ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center">
+              <TableCell colSpan={7} className="h-24 text-center">
                 <div className="flex justify-center items-center">
                   <Loader2 className="h-6 w-6 text-fin-green animate-spin mr-2" />
                   <span>Carregando transações...</span>
@@ -129,7 +182,7 @@ export const TransactionList = ({
             </TableRow>
           ) : transactions.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                 Nenhuma transação encontrada.
               </TableCell>
             </TableRow>
@@ -154,6 +207,9 @@ export const TransactionList = ({
                     {transaction.category}
                   </Badge>
                 </TableCell>
+                <TableCell>
+                  {getStatusBadge(transaction.status)}
+                </TableCell>
                 <TableCell className={`text-right font-semibold ${
                   transaction.type === "income" ? "text-fin-green" : "text-fin-red"
                 }`}>
@@ -167,12 +223,12 @@ export const TransactionList = ({
                   <div className="flex justify-end space-x-1">
                     {showStatusActions && (
                       <>
-                        {transaction.status === "pending" ? (
+                        {transaction.status !== "completed" && (
                           <Button 
                             variant="receipt" 
                             size="icon" 
                             className="h-8 w-8"
-                            onClick={() => handleMarkAsReceived(transaction.id)}
+                            onClick={() => handleMarkAsComplete(transaction.id)}
                             disabled={processingId === transaction.id}
                             title="Marcar como concluído"
                           >
@@ -182,7 +238,8 @@ export const TransactionList = ({
                               <Check className="h-4 w-4" />
                             )}
                           </Button>
-                        ) : (
+                        )}
+                        {transaction.status !== "pending" && (
                           <Button 
                             variant="outline" 
                             size="icon" 
@@ -195,6 +252,22 @@ export const TransactionList = ({
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
                               <Clock className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
+                        {transaction.status !== "overdue" && (
+                          <Button 
+                            variant="destructive" 
+                            size="icon" 
+                            className="h-8 w-8 bg-red-500/20 hover:bg-red-500/30 text-red-500"
+                            onClick={() => handleMarkAsOverdue(transaction.id)}
+                            disabled={processingId === transaction.id}
+                            title="Marcar como atrasado"
+                          >
+                            {processingId === transaction.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <AlertTriangle className="h-4 w-4" />
                             )}
                           </Button>
                         )}

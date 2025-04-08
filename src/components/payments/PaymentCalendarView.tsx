@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { format, parse, addMonths, isSameDay } from "date-fns";
 import { Badge } from "@/components/ui/badge";
-import { Repeat, CheckCircle, Clock } from "lucide-react";
+import { Repeat, CheckCircle, Clock, AlertTriangle } from "lucide-react";
 
 interface Payment {
   id: string;
@@ -124,6 +124,8 @@ export const PaymentCalendarView = ({
         return <CheckCircle className="h-3 w-3 text-fin-green mr-1 flex-shrink-0" />;
       case 'pending':
         return <Clock className="h-3 w-3 text-yellow-500 mr-1 flex-shrink-0" />;
+      case 'overdue':
+        return <AlertTriangle className="h-3 w-3 text-fin-red mr-1 flex-shrink-0" />;
       default:
         return null;
     }
