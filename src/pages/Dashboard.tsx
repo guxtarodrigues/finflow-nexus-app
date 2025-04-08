@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { MetricCard } from "@/components/dashboard/MetricCard";
@@ -8,7 +7,7 @@ import { CircleDollarSign, TrendingUp, FileText, Clock, Users, CreditCard, Check
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { startOfMonth, endOfMonth, format, addMonths, subMonths, isAfter } from "date-fns";
+import { startOfMonth, endOfMonth, format, addMonths, subMonths, isAfter, isBefore, parseISO, isEqual } from "date-fns";
 import { Client } from "@/types/clients";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -19,6 +18,8 @@ interface Payment {
   due_date: string;
   recipient: string;
   value: number;
+  recurrence: string;
+  status: string;
 }
 
 // Define specific type for financial data to avoid deep instantiation
@@ -86,23 +87,88 @@ const Dashboard = () => {
       if (transactionsError) throw transactionsError;
       
       // Fetch upcoming payments
-      const { data: upcomingPayments, error: paymentsError } = await supabase
+      const { data: originalPayments, error: paymentsError } = await supabase
         .from('payments')
         .select('*')
         .eq('user_id', user?.id)
-        .eq('status', 'pending')
-        .order('due_date', { ascending: true })
-        .limit(5);
+        .order('due_date', { ascending: true });
       
       if (paymentsError) throw paymentsError;
       
-      // Fetch all payments to calculate statistics
-      const { data: allPayments, error: allPaymentsError } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('user_id', user?.id);
+      // Process recurring payments to include future months instances
+      let processedPayments: Payment[] = [];
+      
+      // Only proceed if we have original payments data
+      if (originalPayments && originalPayments.length > 0) {
+        // Get current date for comparison
+        const currentDate = new Date();
         
-      if (allPaymentsError) throw allPaymentsError;
+        // Process each payment
+        originalPayments.forEach(payment => {
+          // Add the original payment
+          processedPayments.push(payment as Payment);
+          
+          // Calculate future occurrences for recurring payments
+          if (payment.recurrence && payment.recurrence !== 'once') {
+            // Determine number of months to add based on recurrence type
+            const getMonthsToAdd = (recurrenceType: string) => {
+              switch (recurrenceType) {
+                case 'monthly': return 1;
+                case 'bimonthly': return 2;
+                case 'quarterly': return 3;
+                case 'biannual': return 6;
+                case 'annual': return 12;
+                default: return 0;
+              }
+            };
+            
+            const monthsToAdd = getMonthsToAdd(payment.recurrence);
+            
+            // Number of occurrences based on recurrence type
+            // This is a simple approximation, could be made more sophisticated
+            const getOccurrences = (recurrenceType: string) => {
+              switch (recurrenceType) {
+                case 'monthly': return 12; // Show for a year
+                case 'bimonthly': return 6; // Show for a year
+                case 'quarterly': return 4; // Show for a year
+                case 'biannual': return 2; // Show for a year
+                case 'annual': return 1; // Show for a year
+                default: return 0;
+              }
+            };
+            
+            const occurrences = getOccurrences(payment.recurrence);
+            
+            // Generate future instances
+            if (monthsToAdd > 0) {
+              const dueDate = new Date(payment.due_date);
+              
+              for (let i = 1; i <= occurrences; i++) {
+                const futureDueDate = addMonths(dueDate, monthsToAdd * i);
+                
+                // Only add future instances
+                if (isAfter(futureDueDate, currentDate)) {
+                  processedPayments.push({
+                    ...payment,
+                    id: `${payment.id}-occurrence-${i}`, // Generate unique ID for the occurrence
+                    due_date: futureDueDate.toISOString(),
+                    status: 'pending', // Future occurrences are always pending
+                  } as Payment);
+                }
+              }
+            }
+          }
+        });
+      }
+      
+      // Filter to just show the upcoming 5 payments
+      const upcomingPayments = processedPayments
+        .filter(payment => payment.status === 'pending')
+        .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
+        .slice(0, 5);
+      
+      // Fetch all payments to calculate statistics (using processed payments to include recurring ones)
+      const allPayments = processedPayments;
       
       // Fetch active clients - Fix for type instantiation issue
       const { data: clientsData, error: clientsError } = await supabase
@@ -173,6 +239,7 @@ const Dashboard = () => {
       // Calculate payment statistics
       const now = new Date();
       
+      // Process statistics for all payments (including recurring ones)
       // Payments that have been received/completed
       const paymentsReceived = allPayments
         ? allPayments.filter(payment => payment.status === 'completed').reduce((sum, payment) => sum + Number(payment.value), 0)
@@ -368,6 +435,9 @@ const Dashboard = () => {
                           <div className="font-medium">{payment.description}</div>
                           <div className="text-xs text-fin-text-secondary">
                             {format(new Date(payment.due_date), 'dd/MM/yyyy')} • {payment.recipient}
+                            {payment.recurrence && payment.recurrence !== 'once' && (
+                              <span className="ml-1 text-fin-green">• Recorrente</span>
+                            )}
                           </div>
                         </div>
                       </div>
