@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   CreditCard, 
@@ -1136,11 +1135,11 @@ const Pagamentos = () => {
         ) : (
           <PaymentCalendarView 
             payments={payments} 
+            currentDate={currentDate}
             onPaymentClick={(payment) => {
               setSelectedPayment(payment);
               setIsUpdateSheetOpen(true);
             }}
-            currentMonth={currentDate}
             onMonthChange={setCurrentDate}
           />
         )}

@@ -13,9 +13,17 @@ interface Payment {
 interface PaymentCalendarViewProps {
   payments: Payment[];
   currentDate: Date;
+  onPaymentClick?: (payment: Payment) => void;
+  currentMonth?: Date;
+  onMonthChange?: (date: Date) => void;
 }
 
-export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarViewProps) => {
+export const PaymentCalendarView = ({ 
+  payments, 
+  currentDate,
+  onPaymentClick,
+  onMonthChange 
+}: PaymentCalendarViewProps) => {
   // Helper function to get payments for a specific date
   const getPaymentsForDate = (date: Date) => {
     return payments.filter(payment => {
@@ -94,6 +102,8 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
                       payment.status === 'overdue' ? 'bg-fin-red/20 text-fin-red' :
                       'bg-[#2A2A2E]'
                     }`}
+                    onClick={() => onPaymentClick && onPaymentClick(payment)}
+                    style={{ cursor: onPaymentClick ? 'pointer' : 'default' }}
                   >
                     {payment.description} • {payment.value.toLocaleString('pt-BR', { 
                       style: 'currency', 
