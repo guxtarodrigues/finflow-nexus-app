@@ -29,4 +29,5 @@ export interface NewClient {
   description: string | null;
   user_id: string;
   payment_status?: 'pending' | 'paid';
+  last_payment_date?: string | null;
 }
