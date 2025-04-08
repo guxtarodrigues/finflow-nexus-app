@@ -170,11 +170,44 @@ const Clientes = () => {
         user_id: user.id
       };
       
-      const { error } = await supabase
+      // Step 1: Insert the client data
+      const { data: clientResult, error: clientError } = await supabase
         .from('clients')
-        .insert(clientData);
+        .insert(clientData)
+        .select('id')
+        .single();
       
-      if (error) throw error;
+      if (clientError) throw clientError;
+      
+      // Step 2: If client has recurring payment and monthly value, create a transaction
+      if (newClient.recurring_payment && newClient.monthly_value && newClient.monthly_value > 0) {
+        const currentDate = new Date();
+        const transactionData = {
+          user_id: user.id,
+          client_id: clientResult.id,
+          description: `Mensalidade - ${newClient.name}`,
+          category: 'Receita de Cliente',
+          type: 'income',
+          value: newClient.monthly_value,
+          date: currentDate.toISOString(),
+          due_date: currentDate.toISOString(),
+          status: 'pending',
+          recurrence: newClient.contract_end ? 'monthly' : 'once'
+        };
+        
+        const { error: transactionError } = await supabase
+          .from('transactions')
+          .insert(transactionData);
+        
+        if (transactionError) {
+          console.error('Error creating initial transaction:', transactionError);
+          toast({
+            title: "Cliente criado, mas houve um erro ao criar o recebimento",
+            description: transactionError.message,
+            variant: "destructive"
+          });
+        }
+      }
       
       setNewClient({
         name: "",
