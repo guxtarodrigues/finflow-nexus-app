@@ -4,11 +4,12 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { CircleDollarSign, TrendingUp, FileText, Clock } from "lucide-react";
+import { CircleDollarSign, TrendingUp, FileText, Clock, Users, CreditCard } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { startOfMonth, endOfMonth, format } from "date-fns";
+import { startOfMonth, endOfMonth, format, addMonths, isWithinInterval } from "date-fns";
+import { Client } from "@/types/clients";
 
 const Dashboard = () => {
   const { toast } = useToast();
@@ -24,7 +25,8 @@ const Dashboard = () => {
     nextMonthForecast: 0,
     activeClients: 0,
     taxPayable: 0,
-    upcomingPayments: []
+    upcomingPayments: [],
+    clientsIncome: 0
   });
 
   useEffect(() => {
@@ -40,6 +42,8 @@ const Dashboard = () => {
       // Get the current month dates
       const currentMonthStart = startOfMonth(new Date());
       const currentMonthEnd = endOfMonth(new Date());
+      const nextMonthStart = startOfMonth(addMonths(new Date(), 1));
+      const nextMonthEnd = endOfMonth(addMonths(new Date(), 1));
       
       // Fetch transactions
       const { data: transactions, error: transactionsError } = await supabase
@@ -59,6 +63,15 @@ const Dashboard = () => {
         .limit(5);
       
       if (paymentsError) throw paymentsError;
+      
+      // Fetch active clients
+      const { data: clients, error: clientsError } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('status', 'active');
+      
+      if (clientsError) throw clientsError;
       
       // Calculate financial metrics
       const currentMonthTransactions = transactions?.filter(tx => {
@@ -80,19 +93,53 @@ const Dashboard = () => {
       const totalIncome = incomeTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
       const totalExpense = expenseTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
       
+      // Calculate clients income (recurring payments)
+      const currentDate = new Date();
+      const clientsData = clients as Client[] || [];
+      
+      const monthlyClientIncome = clientsData
+        .filter(client => 
+          client.recurring_payment && 
+          client.monthly_value && 
+          (!client.contract_end || new Date(client.contract_end) >= currentDate)
+        )
+        .reduce((sum, client) => sum + (client.monthly_value || 0), 0);
+      
+      // Calculate yearly forecast based on transactions and client contracts
+      const yearlyTransactionsForecast = (totalIncome / 12) * 12 - (totalExpense / 12) * 12;
+      const yearlyClientsIncome = monthlyClientIncome * 12;
+      const yearlyForecast = yearlyTransactionsForecast + yearlyClientsIncome;
+      
+      // Calculate next month forecast
+      const nextMonthClientsIncome = clientsData
+        .filter(client => {
+          // Include if client is active, has recurring payment, and contract covers next month
+          return client.recurring_payment && 
+                 client.status === 'active' && 
+                 client.monthly_value && 
+                 (!client.contract_end || new Date(client.contract_end) >= nextMonthEnd);
+        })
+        .reduce((sum, client) => sum + (client.monthly_value || 0), 0);
+      
+      const nextMonthForecast = currentMonthIncome + nextMonthClientsIncome - currentMonthExpense;
+      
       // Calculate tax (6% of income)
-      const taxPayable = totalIncome * 0.06;
+      const taxPayable = (totalIncome + monthlyClientIncome) * 0.06;
+      
+      // Total balance includes client income
+      const totalBalance = totalIncome - totalExpense + monthlyClientIncome;
       
       setFinancialData({
-        totalBalance: totalIncome - totalExpense,
-        monthlyIncome: currentMonthIncome,
+        totalBalance,
+        monthlyIncome: currentMonthIncome + monthlyClientIncome,
         monthlyExpense: currentMonthExpense,
-        totalSavings: (totalIncome - totalExpense) * 0.2, // Assuming 20% of net income is saved
-        yearlyForecast: totalIncome * 12 - totalExpense * 12, // Simple forecast based on current data
-        nextMonthForecast: currentMonthIncome - currentMonthExpense, // Simple forecast for next month
-        activeClients: new Set(incomeTransactions.map(tx => tx.category)).size, // Unique categories as "clients"
+        totalSavings: totalBalance * 0.2, // Assuming 20% of net income is saved
+        yearlyForecast,
+        nextMonthForecast,
+        activeClients: clientsData.filter(client => client.status === 'active').length,
         taxPayable,
-        upcomingPayments: upcomingPayments || []
+        upcomingPayments: upcomingPayments || [],
+        clientsIncome: monthlyClientIncome
       });
     } catch (error: any) {
       console.error('Error fetching financial data:', error);
@@ -112,6 +159,10 @@ const Dashboard = () => {
 
   const handleManagePayments = () => {
     navigate('/pagamentos');
+  };
+  
+  const handleManageClients = () => {
+    navigate('/clientes');
   };
 
   const formatCurrency = (value: number) => {
@@ -189,17 +240,20 @@ const Dashboard = () => {
           <div className="fin-card-header">
             <h3 className="fin-card-title">Clientes Ativos</h3>
             <div className="fin-icon-wrapper fin-green-icon">
-              <CircleDollarSign size={20} />
+              <Users size={20} />
             </div>
           </div>
           <div className="fin-value">{financialData.activeClients}</div>
+          <div className="mt-2 text-sm text-fin-text-secondary">
+            Receita mensal: {formatCurrency(financialData.clientsIncome)}
+          </div>
           <div className="mt-2">
             <Button 
               variant="ghost" 
               className="text-fin-green p-0 h-auto"
-              onClick={handleNewTransaction}
+              onClick={handleManageClients}
             >
-              + Novos clientes
+              Gerenciar clientes
             </Button>
           </div>
         </div>
@@ -268,19 +322,25 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="fin-card">
           <div className="fin-card-header">
-            <h3 className="fin-card-title">Despesas por Categoria</h3>
+            <h3 className="fin-card-title">Receita por Cliente</h3>
+            <div className="fin-icon-wrapper fin-green-icon">
+              <CircleDollarSign size={20} />
+            </div>
           </div>
           <div className="mb-2 text-sm text-fin-text-secondary">
-            Visão geral das despesas por categoria
+            Visão geral de receitas por cliente
           </div>
           <div className="h-64 flex items-center justify-center text-fin-text-secondary">
-            Gráfico de despesas por categoria será exibido aqui.
+            Gráfico de receitas por cliente será exibido aqui.
           </div>
         </div>
 
         <div className="fin-card">
           <div className="fin-card-header">
             <h3 className="fin-card-title">Receitas vs Despesas</h3>
+            <div className="fin-icon-wrapper fin-green-icon">
+              <CreditCard size={20} />
+            </div>
           </div>
           <div className="mb-2 text-sm text-fin-text-secondary">
             Comparativo mensal de receitas e despesas
