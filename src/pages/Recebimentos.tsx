@@ -12,7 +12,8 @@ import {
   CalendarIcon,
   Check,
   Pencil,
-  Inbox
+  Inbox,
+  Clock
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ interface Receipt {
   date: string;
   description: string;
   category: string;
+  category_id?: string; // Added to fix type error
   value: number;
   status: string;
   client_id?: string;
@@ -210,25 +212,18 @@ const Recebimentos = () => {
       
       setLoading(true);
       
-      // Start building the query
-      let query = supabase
+      // Fetch transactions and join with clients information
+      const { data, error } = await supabase
         .from('transactions')
         .select(`
           *,
-          clients(name)
+          clients(id, name)
         `)
         .eq('user_id', user.id)
         .eq('type', 'income')
         .gte('date', dateRange.from.toISOString())
         .lte('date', dateRange.to.toISOString())
         .order('date', { ascending: false });
-      
-      // Apply filter if set
-      if (filterStatus) {
-        query = query.eq('status', filterStatus);
-      }
-      
-      const { data, error } = await query;
       
       if (error) throw error;
       
@@ -243,10 +238,11 @@ const Recebimentos = () => {
         date: format(new Date(item.date), 'dd/MM/yyyy'),
         description: item.description,
         category: item.category,
+        category_id: item.category_id,
         value: Number(item.value),
         status: item.status,
-        client_id: item.client_id,
-        client_name: item.clients ? item.clients.name : null
+        client_id: item.clients?.id, // Use optional chaining as this might be null
+        client_name: item.clients?.name // Use optional chaining as this might be null
       }));
       
       setReceipts(formattedReceipts);
@@ -454,7 +450,6 @@ const Recebimentos = () => {
     setEditingReceipt({
       ...receipt,
       date: format(new Date(receipt.date.split('/').reverse().join('-')), 'yyyy-MM-dd'),
-      value: receipt.value,
     });
     setIsEditDialogOpen(true);
   };
@@ -1028,7 +1023,10 @@ const Recebimentos = () => {
                       placeholder="0,00"
                       className="bg-[#1F1F23] border-[#2A2A2E]"
                       value={editingReceipt.value}
-                      onChange={(e) => setEditingReceipt({...editingReceipt, value: e.target.value})}
+                      onChange={(e) => setEditingReceipt({
+                        ...editingReceipt, 
+                        value: Number(e.target.value)
+                      })}
                     />
                   </div>
                   <div className="space-y-2">
