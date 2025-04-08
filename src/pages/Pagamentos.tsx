@@ -1113,9 +1113,7 @@ const Pagamentos = () => {
             ) : (
               <PaymentCalendarView 
                 payments={payments} 
-                onSelectDate={(date) => {
-                  // TODO: Implementar a ação ao selecionar uma data no calendário
-                }}
+                currentDate={currentDate}
               />
             )}
           </TabsContent>
@@ -1201,9 +1199,7 @@ const Pagamentos = () => {
             ) : (
               <PaymentCalendarView 
                 payments={payments.filter(p => p.status === 'pending')} 
-                onSelectDate={(date) => {
-                  // TODO: Implementar a ação ao selecionar uma data no calendário
-                }}
+                currentDate={currentDate}
               />
             )}
           </TabsContent>
@@ -1281,9 +1277,7 @@ const Pagamentos = () => {
             ) : (
               <PaymentCalendarView 
                 payments={payments.filter(p => p.status === 'completed')} 
-                onSelectDate={(date) => {
-                  // TODO: Implementar a ação ao selecionar uma data no calendário
-                }}
+                currentDate={currentDate}
               />
             )}
           </TabsContent>
@@ -1369,9 +1363,7 @@ const Pagamentos = () => {
             ) : (
               <PaymentCalendarView 
                 payments={payments.filter(p => p.status === 'overdue')} 
-                onSelectDate={(date) => {
-                  // TODO: Implementar a ação ao selecionar uma data no calendário
-                }}
+                currentDate={currentDate}
               />
             )}
           </TabsContent>

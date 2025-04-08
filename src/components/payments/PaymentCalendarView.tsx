@@ -16,10 +16,15 @@ interface Payment {
 
 interface PaymentCalendarViewProps {
   payments: Payment[];
-  currentDate: Date;
+  currentDate?: Date;
+  onSelectDate?: (date: Date) => void;
 }
 
-export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarViewProps) => {
+export const PaymentCalendarView = ({ 
+  payments, 
+  currentDate = new Date(),
+  onSelectDate 
+}: PaymentCalendarViewProps) => {
   const generateFuturePayments = () => {
     const allPayments: Payment[] = [...payments];
     
@@ -106,6 +111,12 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
     1
   ).getDay();
 
+  const handleDateClick = (date: Date) => {
+    if (onSelectDate) {
+      onSelectDate(date);
+    }
+  };
+
   return (
     <div className="rounded-md border border-[#2A2A2E] p-4">
       <div className="mb-4 text-center">
@@ -132,9 +143,10 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
           return (
             <div 
               key={`day-${i + 1}`} 
-              className={`p-2 h-24 min-h-[6rem] bg-[#1F1F23] rounded-md overflow-hidden ${
+              className={`p-2 h-24 min-h-[6rem] bg-[#1F1F23] rounded-md overflow-hidden cursor-pointer hover:bg-[#2A2A2E]/70 ${
                 isCurrentDate ? 'border border-fin-green' : ''
               }`}
+              onClick={() => handleDateClick(date)}
             >
               <div className="flex justify-between items-center">
                 <span className={`text-sm font-medium ${isCurrentDate ? 'text-fin-green' : ''}`}>
