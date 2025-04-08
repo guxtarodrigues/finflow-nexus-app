@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   Home,
-  ArrowRight,
+  ArrowLeftRight,
   CreditCard,
   Users,
   Database,
@@ -32,13 +32,13 @@ export const Sidebar = () => {
     {
       name: "Movimentações",
       path: "#",
-      icon: <ArrowRight size={20} />,
+      icon: <ArrowLeftRight size={20} />,
       expanded: true,
       subItems: [
         {
           name: "Movimentações",
           path: "/movimentacoes",
-          icon: <ArrowRight size={18} />,
+          icon: <ArrowLeftRight size={18} />,
         },
         {
           name: "Pagamentos",
