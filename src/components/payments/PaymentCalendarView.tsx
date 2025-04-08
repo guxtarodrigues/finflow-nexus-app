@@ -1,6 +1,6 @@
+
 import { useState } from "react";
 import { format, parse, addMonths, isSameDay } from "date-fns";
-import { pt } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Repeat } from "lucide-react";
 
@@ -110,7 +110,7 @@ export const PaymentCalendarView = ({ payments, currentDate }: PaymentCalendarVi
     <div className="rounded-md border border-[#2A2A2E] p-4">
       <div className="mb-4 text-center">
         <h3 className="text-lg font-semibold">
-          Calendário de Pagamentos - {format(currentDate, 'MMMM yyyy', { locale: pt })}
+          Calendário de Pagamentos - {format(currentDate, 'MMMM yyyy')}
         </h3>
       </div>
       <div className="grid grid-cols-7 gap-1">

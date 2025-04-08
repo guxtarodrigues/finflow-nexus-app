@@ -1,5 +1,5 @@
+
 import { format } from "date-fns";
-import { pt } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
@@ -28,13 +28,13 @@ export const DateFilter = ({
   currentDate
 }: DateFilterProps) => {
   
-  // Format date range for display using Portuguese locale
+  // Format date range for display (without locale for now to avoid import issues)
   const formatDateRange = () => {
     if (dateFilterMode === "current" || dateFilterMode === "prev" || dateFilterMode === "next") {
-      // Use currentDate for displaying the month name in the selector with Portuguese locale
-      return `${format(currentDate, 'MMMM yyyy', { locale: pt })}`;
+      // Use currentDate for displaying the month name in the selector
+      return `${format(currentDate, 'MMMM yyyy')}`;
     } else {
-      return `${format(dateRange.from, 'dd/MM/yyyy', { locale: pt })} - ${format(dateRange.to, 'dd/MM/yyyy', { locale: pt })}`;
+      return `${format(dateRange.from, 'dd/MM/yyyy')} - ${format(dateRange.to, 'dd/MM/yyyy')}`;
     }
   };
 
@@ -77,7 +77,6 @@ export const DateFilter = ({
             }}
             numberOfMonths={2}
             className="p-3 pointer-events-auto"
-            locale={pt}
           />
         </PopoverContent>
       </Popover>
