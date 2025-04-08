@@ -13,8 +13,6 @@ export interface Client {
   user_id: string;
   created_at: string;
   updated_at: string;
-  payment_status: 'pending' | 'paid' | null;
-  last_payment_date: string | null;
 }
 
 export interface NewClient {
@@ -28,6 +26,4 @@ export interface NewClient {
   recurring_payment: boolean;
   description: string | null;
   user_id: string;
-  payment_status: 'pending' | 'paid' | null;
-  last_payment_date: string | null;
 }
