@@ -9,7 +9,6 @@ import {
   CircleDollarSign, 
   CheckCircle, 
   XCircle,
-  Check,
   Loader2
 } from "lucide-react";
 import { 
@@ -174,17 +173,16 @@ export const ClientCard = ({ client, onEdit, onDelete, onStatusChange }: ClientC
         {client.status === 'active' && client.monthly_value && (
           <Button 
             variant="receipt" 
-            size="sm"
+            size="icon"
             onClick={handleMarkAsReceived}
             disabled={processingId === client.id}
-            className="text-xs"
+            className="rounded-full w-8 h-8"
           >
             {processingId === client.id ? (
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Check className="h-4 w-4 mr-1" />
+              <CircleDollarSign className="h-4 w-4" />
             )}
-            Registrar Pagamento
           </Button>
         )}
       </CardFooter>
