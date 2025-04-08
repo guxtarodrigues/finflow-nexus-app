@@ -20,6 +20,7 @@ import {
   Target,
   Bell,
   ChevronRight,
+  Inbox,
 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
@@ -49,6 +50,11 @@ export const Sidebar = () => {
           name: "Pagamentos",
           path: "/pagamentos",
           icon: <CreditCard size={18} />,
+        },
+        {
+          name: "Recebimentos",
+          path: "/recebimentos",
+          icon: <Inbox size={18} />,
         },
         {
           name: "Categorias",

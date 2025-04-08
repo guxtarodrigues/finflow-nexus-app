@@ -1,24 +1,18 @@
 
 import { useState, useEffect } from "react";
 import { 
+  ArrowLeftRight, 
   ChevronDown, 
   Download, 
   Filter, 
   Plus, 
-  Search, 
-  Trash2,
-  Check,
-  Clock,
-  AlertCircle,
+  Search,
   Loader2,
-  Repeat,
-  ArrowUp,
-  ArrowRight,
-  Tag,
-  Edit,
-  CheckCircle,
+  Calendar,
   CalendarIcon,
-  DollarSign
+  Check,
+  Pencil,
+  Inbox
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,38 +23,37 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogFooter, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger 
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval } from "date-fns";
+import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DateFilter } from "@/components/payments/DateFilter";
+import { startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
-interface Transaction {
+interface Receipt {
   id: string;
   date: string;
   description: string;
   category: string;
   value: number;
-  type: string;
   status: string;
-  category_id?: string;
+  client_id?: string;
+  client_name?: string;
 }
 
 interface Category {
@@ -73,48 +66,23 @@ interface Category {
 interface Client {
   id: string;
   name: string;
-  email: string | null;
-  phone: string | null;
 }
-
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case "completed":
-      return (
-        <Badge variant="outline" className="bg-fin-green/20 text-fin-green border-0">
-          <Check className="mr-1 h-3 w-3" /> Recebido
-        </Badge>
-      );
-    case "pending":
-      return (
-        <Badge variant="outline" className="bg-amber-500/20 text-amber-500 border-0">
-          <Clock className="mr-1 h-3 w-3" /> Pendente
-        </Badge>
-      );
-    case "overdue":
-      return (
-        <Badge variant="outline" className="bg-fin-red/20 text-fin-red border-0">
-          <AlertCircle className="mr-1 h-3 w-3" /> Atrasado
-        </Badge>
-      );
-    default:
-      return null;
-  }
-};
 
 const Recebimentos = () => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [loadingClients, setLoadingClients] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null);
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("all");
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  const [isUpdateSheetOpen, setIsUpdateSheetOpen] = useState(false);
+  const { user } = useAuth();
+  
+  // Date filter states
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dateRange, setDateRange] = useState<{
     from: Date;
@@ -125,42 +93,36 @@ const Recebimentos = () => {
   });
   const [dateFilterMode, setDateFilterMode] = useState<"current" | "prev" | "next" | "custom">("current");
   
-  const [newTransaction, setNewTransaction] = useState({
+  // Form validation error state
+  const [formErrors, setFormErrors] = useState<{
+    description?: boolean;
+    category_id?: boolean;
+    value?: boolean;
+    date?: boolean;
+    client_id?: boolean;
+  }>({});
+  
+  // New receipt form state
+  const [newReceipt, setNewReceipt] = useState({
     description: "",
-    client_id: "",
     category_id: "",
     value: "",
     date: format(new Date(), "yyyy-MM-dd"),
-    status: "completed"
-  });
-  
-  const [formErrors, setFormErrors] = useState<{
-    description?: boolean;
-    value?: boolean;
-    date?: boolean;
-    category_id?: boolean;
-  }>({});
-  
-  const [dashboardData, setDashboardData] = useState({
-    totalReceived: 0,
-    totalPending: 0,
-    totalOverdue: 0,
-    monthlyAverage: 0,
-    incomeCount: 0
+    client_id: "",
+    status: "pending"
   });
   
   const { toast } = useToast();
-  const { user } = useAuth();
 
   useEffect(() => {
     if (user) {
-      fetchTransactions();
+      fetchReceipts();
       fetchCategories();
       fetchClients();
-      calculateDashboardData();
     }
   }, [filterStatus, user, dateRange]);
 
+  // Update date range when date filter mode changes
   useEffect(() => {
     switch (dateFilterMode) {
       case "current":
@@ -171,16 +133,17 @@ const Recebimentos = () => {
         break;
       case "prev":
         setDateRange({
-          from: startOfMonth(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1)),
-          to: endOfMonth(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))
+          from: startOfMonth(subMonths(currentDate, 1)),
+          to: endOfMonth(subMonths(currentDate, 1))
         });
         break;
       case "next":
         setDateRange({
-          from: startOfMonth(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1)),
-          to: endOfMonth(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))
+          from: startOfMonth(addMonths(currentDate, 1)),
+          to: endOfMonth(addMonths(currentDate, 1))
         });
         break;
+      // Custom range is handled directly by the date picker
     }
   }, [dateFilterMode, currentDate]);
 
@@ -194,7 +157,7 @@ const Recebimentos = () => {
         .from('categories')
         .select('*')
         .eq('user_id', user.id)
-        .eq('type', 'income');
+        .in('type', ['income', 'investment']);
       
       if (error) throw error;
       
@@ -221,7 +184,7 @@ const Recebimentos = () => {
       
       const { data, error } = await supabase
         .from('clients')
-        .select('*')
+        .select('id, name')
         .eq('user_id', user.id);
       
       if (error) throw error;
@@ -241,19 +204,26 @@ const Recebimentos = () => {
     }
   };
 
-  const fetchTransactions = async () => {
+  const fetchReceipts = async () => {
     try {
       if (!user) return;
       
       setLoading(true);
       
+      // Start building the query
       let query = supabase
         .from('transactions')
-        .select('*')
+        .select(`
+          *,
+          clients(name)
+        `)
         .eq('user_id', user.id)
         .eq('type', 'income')
+        .gte('date', dateRange.from.toISOString())
+        .lte('date', dateRange.to.toISOString())
         .order('date', { ascending: false });
       
+      // Apply filter if set
       if (filterStatus) {
         query = query.eq('status', filterStatus);
       }
@@ -263,36 +233,25 @@ const Recebimentos = () => {
       if (error) throw error;
       
       if (!data) {
-        setTransactions([]);
+        setReceipts([]);
         return;
       }
       
-      const formattedTransactions = data.map((item) => ({
+      // Format the receipts data
+      const formattedReceipts = data.map((item) => ({
         id: item.id,
         date: format(new Date(item.date), 'dd/MM/yyyy'),
         description: item.description,
         category: item.category,
         value: Number(item.value),
-        type: item.type,
         status: item.status,
-        category_id: item.category_id
+        client_id: item.client_id,
+        client_name: item.clients ? item.clients.name : null
       }));
       
-      const filteredByDate = formattedTransactions.filter(transaction => {
-        try {
-          const txDate = parseISO(transaction.date.split('/').reverse().join('-'));
-          return isWithinInterval(txDate, {
-            start: dateRange.from,
-            end: dateRange.to
-          });
-        } catch (error) {
-          return false;
-        }
-      });
-      
-      setTransactions(filteredByDate);
+      setReceipts(formattedReceipts);
     } catch (error: any) {
-      console.error('Error fetching transactions:', error);
+      console.error('Error fetching receipts:', error);
       toast({
         title: "Erro ao carregar recebimentos",
         description: error.message,
@@ -303,812 +262,838 @@ const Recebimentos = () => {
     }
   };
 
-  const calculateDashboardData = async () => {
-    try {
-      if (!user) return;
-
-      const { data: allTransactions, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('type', 'income');
-
-      if (error) throw error;
-
-      if (!allTransactions) return;
-
-      const completedTransactions = allTransactions.filter(tx => tx.status === 'completed');
-      const pendingTransactions = allTransactions.filter(tx => tx.status === 'pending');
-      const overdueTransactions = allTransactions.filter(tx => tx.status === 'overdue');
-      
-      const totalReceived = completedTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
-      const totalPending = pendingTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
-      const totalOverdue = overdueTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
-      
-      // Calculate monthly average for the last 6 months
-      const now = new Date();
-      const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1);
-      
-      const last6MonthsTransactions = completedTransactions.filter(tx => 
-        new Date(tx.date) >= sixMonthsAgo
-      );
-      
-      const monthlyAverage = last6MonthsTransactions.length > 0 
-        ? totalReceived / 6 
-        : 0;
-
-      setDashboardData({
-        totalReceived,
-        totalPending,
-        totalOverdue,
-        monthlyAverage,
-        incomeCount: completedTransactions.length
-      });
-    } catch (error: any) {
-      console.error('Error calculating dashboard data:', error);
-      toast({
-        title: "Erro ao calcular dados do dashboard",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
+  const validateForm = (receipt: typeof newReceipt) => {
+    const errors = {
+      description: !receipt.description,
+      category_id: !receipt.category_id,
+      value: !receipt.value,
+      date: !receipt.date,
+      client_id: !receipt.client_id
+    };
+    
+    setFormErrors(errors);
+    return !Object.values(errors).some(Boolean);
   };
 
-  const handleClientChange = (clientId: string) => {
-    setNewTransaction({
-      ...newTransaction,
-      client_id: clientId
-    });
-  };
-
-  const handleAddTransaction = async () => {
+  const handleCreateReceipt = async () => {
     try {
       if (!user) return;
       
-      const errors: {
-        description?: boolean;
-        value?: boolean;
-        date?: boolean;
-        category_id?: boolean;
-      } = {};
-      
-      if (!newTransaction.description) errors.description = true;
-      if (!newTransaction.value) errors.value = true;
-      if (!newTransaction.date) errors.date = true;
-      if (!newTransaction.category_id) errors.category_id = true;
-      
-      if (Object.keys(errors).length > 0) {
-        setFormErrors(errors);
+      if (!validateForm(newReceipt)) {
         toast({
-          title: "Campos obrigatórios",
-          description: "Preencha todos os campos destacados em vermelho para continuar.",
+          title: "Dados incompletos",
+          description: "Preencha todos os campos obrigatórios",
           variant: "destructive"
         });
         return;
       }
-      
-      setFormErrors({});
-      
-      // Get category name
-      const selectedCategory = categories.find(cat => cat.id === newTransaction.category_id);
-      
+
+      // Get the category name from the selected category_id
+      const selectedCategory = categories.find(cat => cat.id === newReceipt.category_id);
+      if (!selectedCategory) {
+        toast({
+          title: "Categoria inválida",
+          description: "Selecione uma categoria válida",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Insert single object (not an array) and format data correctly
       const { error } = await supabase
         .from('transactions')
         .insert({
-          user_id: user.id,
-          description: newTransaction.description,
-          category: selectedCategory ? selectedCategory.name : 'Outros',
-          category_id: newTransaction.category_id,
-          value: parseFloat(newTransaction.value),
-          date: newTransaction.date,
+          description: newReceipt.description,
+          category: selectedCategory.name,
+          category_id: newReceipt.category_id,
           type: 'income',
-          status: newTransaction.status
+          value: Number(newReceipt.value),
+          date: new Date(newReceipt.date).toISOString(),
+          status: newReceipt.status,
+          user_id: user.id,
+          client_id: newReceipt.client_id
         });
-      
+
       if (error) throw error;
       
-      toast({
-        title: "Recebimento adicionado",
-        description: "O recebimento foi adicionado com sucesso.",
-      });
-      
-      setNewTransaction({
+      // Reset form and close dialog
+      setNewReceipt({
         description: "",
-        client_id: "",
         category_id: "",
         value: "",
         date: format(new Date(), "yyyy-MM-dd"),
-        status: "completed"
+        client_id: "",
+        status: "pending"
       });
-      
       setIsDialogOpen(false);
-      fetchTransactions();
-      calculateDashboardData();
-    } catch (error: any) {
-      console.error('Error adding transaction:', error);
+      setFormErrors({});
+      
+      // Refresh receipt list
+      await fetchReceipts();
+      
       toast({
-        title: "Erro ao adicionar recebimento",
+        title: "Recebimento criado",
+        description: "O recebimento foi registrado com sucesso",
+      });
+    } catch (error: any) {
+      console.error('Error creating receipt:', error);
+      toast({
+        title: "Erro ao criar recebimento",
         description: error.message,
         variant: "destructive"
       });
     }
   };
 
-  const formatCurrency = (value: number) => {
-    return value.toLocaleString('pt-BR', { 
-      style: 'currency', 
-      currency: 'BRL' 
-    });
+  const handleEditReceipt = async () => {
+    try {
+      if (!user || !editingReceipt) return;
+      
+      // Get the category name from the selected category_id
+      const selectedCategory = categories.find(cat => cat.id === editingReceipt.category_id);
+      if (!selectedCategory) {
+        toast({
+          title: "Categoria inválida",
+          description: "Selecione uma categoria válida",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Update the receipt
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          description: editingReceipt.description,
+          category: selectedCategory.name,
+          category_id: editingReceipt.category_id,
+          value: Number(editingReceipt.value),
+          date: new Date(editingReceipt.date).toISOString(),
+          status: editingReceipt.status,
+          client_id: editingReceipt.client_id
+        })
+        .eq('id', editingReceipt.id);
+
+      if (error) throw error;
+      
+      // Reset form and close dialog
+      setEditingReceipt(null);
+      setIsEditDialogOpen(false);
+      
+      // Refresh receipt list
+      await fetchReceipts();
+      
+      toast({
+        title: "Recebimento atualizado",
+        description: "O recebimento foi atualizado com sucesso",
+      });
+    } catch (error: any) {
+      console.error('Error updating receipt:', error);
+      toast({
+        title: "Erro ao atualizar recebimento",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
   };
 
+  const handleDeleteReceipt = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      // Refresh receipt list
+      await fetchReceipts();
+      
+      toast({
+        title: "Recebimento excluído",
+        description: "O recebimento foi removido com sucesso",
+      });
+    } catch (error: any) {
+      console.error('Error deleting receipt:', error);
+      toast({
+        title: "Erro ao excluir recebimento",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({ status: newStatus })
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      // Refresh receipt list
+      await fetchReceipts();
+      
+      toast({
+        title: "Status atualizado",
+        description: `O recebimento foi marcado como ${newStatus === 'completed' ? 'recebido' : 'pendente'}`,
+      });
+    } catch (error: any) {
+      console.error('Error updating receipt status:', error);
+      toast({
+        title: "Erro ao atualizar status",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const openEditDialog = (receipt: Receipt) => {
+    // Format the receipt data for editing
+    setEditingReceipt({
+      ...receipt,
+      date: format(new Date(receipt.date.split('/').reverse().join('-')), 'yyyy-MM-dd'),
+      value: receipt.value,
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  // Date filter handlers
+  const handlePrevMonth = () => {
+    setDateFilterMode("prev");
+    setCurrentDate(prevDate => subMonths(prevDate, 1));
+  };
+
+  const handleNextMonth = () => {
+    setDateFilterMode("next");
+    setCurrentDate(prevDate => addMonths(prevDate, 1));
+  };
+
+  const handleCurrentMonth = () => {
+    setDateFilterMode("current");
+    setCurrentDate(new Date());
+  };
+
+  const handleDateRangeChange = (range: { from: Date; to: Date }) => {
+    setDateRange(range);
+    setDateFilterMode("custom");
+  };
+
+  // Filter receipts based on search term
+  const filteredReceipts = receipts.filter(receipt => 
+    receipt.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    receipt.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (receipt.client_name && receipt.client_name.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-500/20 text-green-500';
+      case 'pending':
+        return 'bg-yellow-500/20 text-yellow-500';
+      default:
+        return 'bg-gray-500/20 text-gray-500';
+    }
+  };
+  
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'Recebido';
+      case 'pending':
+        return 'Pendente';
+      default:
+        return status;
+    }
+  };
+  
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Recebimentos</h1>
           <p className="text-muted-foreground">
-            Gerencie seus recebimentos e receitas.
+            Gerencie seus recebimentos e receitas
           </p>
         </div>
-        
-        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto bg-fin-green text-black hover:bg-fin-green/90">
-                <Plus className="mr-2 h-4 w-4" /> Novo Recebimento
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px] bg-[#1A1A1E] border-[#2A2A2E] text-white">
-              <DialogHeader>
-                <DialogTitle>Novo Recebimento</DialogTitle>
-                <DialogDescription>
-                  Adicione um novo recebimento para controlar suas finanças.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-6 py-4">
-                <div className="grid grid-cols-1 gap-4">
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-fin-green text-black hover:bg-fin-green/90">
+              <Plus className="mr-2 h-4 w-4" /> Novo Recebimento
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[500px] bg-[#1A1A1E] border-[#2A2A2E] text-white">
+            <DialogHeader>
+              <DialogTitle>Novo Recebimento</DialogTitle>
+              <DialogDescription>
+                Adicione um novo recebimento ao sistema.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-6 py-4">
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="description" className={formErrors.description ? "text-red-500" : ""}>
+                    Descrição*
+                  </Label>
+                  <Input
+                    id="description"
+                    placeholder="Ex: Pagamento de cliente, Venda, etc."
+                    className={cn(
+                      "bg-[#1F1F23] border-[#2A2A2E]",
+                      formErrors.description && "border-red-500"
+                    )}
+                    value={newReceipt.description}
+                    onChange={(e) => {
+                      setNewReceipt({...newReceipt, description: e.target.value});
+                      setFormErrors({...formErrors, description: false});
+                    }}
+                  />
+                  {formErrors.description && (
+                    <p className="text-red-500 text-xs mt-1">Descrição é obrigatória</p>
+                  )}
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="client" className={formErrors.client_id ? "text-red-500" : ""}>
+                    Cliente*
+                  </Label>
+                  <Select
+                    value={newReceipt.client_id}
+                    onValueChange={(value) => {
+                      setNewReceipt({...newReceipt, client_id: value});
+                      setFormErrors({...formErrors, client_id: false});
+                    }}
+                  >
+                    <SelectTrigger className={cn(
+                      "bg-[#1F1F23] border-[#2A2A2E]",
+                      formErrors.client_id && "border-red-500"
+                    )}>
+                      <SelectValue placeholder="Selecione um cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loadingClients ? (
+                        <div className="flex items-center justify-center p-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span className="ml-2">Carregando...</span>
+                        </div>
+                      ) : clients.length === 0 ? (
+                        <div className="p-2 text-center">
+                          <p className="text-sm text-muted-foreground">Nenhum cliente encontrado</p>
+                          <Button 
+                            variant="link" 
+                            className="p-0 h-auto mt-1 text-fin-green"
+                            onClick={() => {
+                              setIsDialogOpen(false);
+                              // Add logic to navigate to clients page
+                            }}
+                          >
+                            Criar cliente
+                          </Button>
+                        </div>
+                      ) : (
+                        clients.map(client => (
+                          <SelectItem key={client.id} value={client.id}>
+                            {client.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {formErrors.client_id && (
+                    <p className="text-red-500 text-xs mt-1">Cliente é obrigatório</p>
+                  )}
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="category" className={formErrors.category_id ? "text-red-500" : ""}>
+                    Categoria*
+                  </Label>
+                  <Select
+                    value={newReceipt.category_id}
+                    onValueChange={(value) => {
+                      setNewReceipt({...newReceipt, category_id: value});
+                      setFormErrors({...formErrors, category_id: false});
+                    }}
+                  >
+                    <SelectTrigger className={cn(
+                      "bg-[#1F1F23] border-[#2A2A2E]",
+                      formErrors.category_id && "border-red-500"
+                    )}>
+                      <SelectValue placeholder="Selecione uma categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loadingCategories ? (
+                        <div className="flex items-center justify-center p-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span className="ml-2">Carregando...</span>
+                        </div>
+                      ) : categories.length === 0 ? (
+                        <div className="p-2 text-center">
+                          <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada</p>
+                          <Button 
+                            variant="link" 
+                            className="p-0 h-auto mt-1 text-fin-green" 
+                            onClick={() => {
+                              setIsDialogOpen(false);
+                              // Add logic to navigate to categories page
+                            }}
+                          >
+                            Criar categoria
+                          </Button>
+                        </div>
+                      ) : (
+                        categories.map(category => (
+                          <SelectItem key={category.id} value={category.id}>
+                            <div className="flex items-center">
+                              <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: category.color }} />
+                              {category.name}
+                            </div>
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {formErrors.category_id && (
+                    <p className="text-red-500 text-xs mt-1">Categoria é obrigatória</p>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="description" className={formErrors.description ? "text-fin-red" : ""}>Descrição *</Label>
+                    <Label htmlFor="value" className={formErrors.value ? "text-red-500" : ""}>
+                      Valor*
+                    </Label>
                     <Input
-                      id="description"
-                      placeholder="Ex: Pagamento do cliente, Venda de produto, etc."
+                      id="value"
+                      type="number"
+                      step="0.01"
+                      placeholder="0,00"
                       className={cn(
                         "bg-[#1F1F23] border-[#2A2A2E]",
-                        formErrors.description ? "border-fin-red focus-visible:ring-fin-red" : ""
+                        formErrors.value && "border-red-500"
                       )}
-                      value={newTransaction.description}
+                      value={newReceipt.value}
                       onChange={(e) => {
-                        setNewTransaction({...newTransaction, description: e.target.value});
-                        if (e.target.value) {
-                          setFormErrors({...formErrors, description: false});
-                        }
+                        setNewReceipt({...newReceipt, value: e.target.value});
+                        setFormErrors({...formErrors, value: false});
                       }}
                     />
-                    {formErrors.description && (
-                      <p className="text-fin-red text-xs">Este campo é obrigatório</p>
+                    {formErrors.value && (
+                      <p className="text-red-500 text-xs mt-1">Valor é obrigatório</p>
                     )}
                   </div>
-                  
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-1">
-                      Cliente
+                    <Label htmlFor="date" className={formErrors.date ? "text-red-500" : ""}>
+                      Data*
                     </Label>
-                    <Select
-                      value={newTransaction.client_id}
-                      onValueChange={handleClientChange}
-                    >
-                      <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
-                        <SelectValue placeholder="Selecione um cliente (opcional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {loadingClients ? (
-                          <div className="flex items-center justify-center p-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span className="ml-2">Carregando...</span>
-                          </div>
-                        ) : clients.length === 0 ? (
-                          <div className="p-2 text-center">
-                            <p className="text-sm text-muted-foreground">Nenhum cliente encontrado</p>
-                          </div>
-                        ) : (
-                          clients.map(client => (
-                            <SelectItem key={client.id} value={client.id}>
-                              {client.name}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className={cn(
-                      "flex items-center gap-1",
-                      formErrors.category_id ? "text-fin-red" : ""
-                    )}>
-                      <Tag className="h-4 w-4" /> Categoria *
-                    </Label>
-                    <Select
-                      value={newTransaction.category_id}
-                      onValueChange={(value) => {
-                        setNewTransaction({...newTransaction, category_id: value});
-                        setFormErrors({...formErrors, category_id: false});
-                      }}
-                    >
-                      <SelectTrigger className={cn(
-                        "bg-[#1F1F23] border-[#2A2A2E]",
-                        formErrors.category_id ? "border-fin-red focus-visible:ring-fin-red" : ""
-                      )}>
-                        <SelectValue placeholder="Selecione uma categoria" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {loadingCategories ? (
-                          <div className="flex items-center justify-center p-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span className="ml-2">Carregando...</span>
-                          </div>
-                        ) : categories.length === 0 ? (
-                          <div className="p-2 text-center">
-                            <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada</p>
-                          </div>
-                        ) : (
-                          categories.map(category => (
-                            <SelectItem key={category.id} value={category.id}>
-                              <div className="flex items-center">
-                                <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: category.color }} />
-                                {category.name}
-                              </div>
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {formErrors.category_id && (
-                      <p className="text-fin-red text-xs">Este campo é obrigatório</p>
-                    )}
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="value" className={formErrors.value ? "text-fin-red" : ""}>Valor *</Label>
-                      <Input
-                        id="value"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0,00"
-                        className={cn(
-                          "bg-[#1F1F23] border-[#2A2A2E]",
-                          formErrors.value ? "border-fin-red focus-visible:ring-fin-red" : ""
-                        )}
-                        value={newTransaction.value}
-                        onChange={(e) => {
-                          setNewTransaction({...newTransaction, value: e.target.value});
-                          if (e.target.value) {
-                            setFormErrors({...formErrors, value: false});
-                          }
-                        }}
-                      />
-                      {formErrors.value && (
-                        <p className="text-fin-red text-xs">Este campo é obrigatório</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="date" className={formErrors.date ? "text-fin-red" : ""}>Data do Recebimento *</Label>
-                      <div className="relative">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "w-full justify-start text-left font-normal bg-[#1F1F23] border-[#2A2A2E]",
-                                !newTransaction.date && "text-muted-foreground",
-                                formErrors.date ? "border-fin-red focus-visible:ring-fin-red" : ""
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {newTransaction.date ? format(new Date(newTransaction.date), "dd/MM/yyyy") : <span>Selecione uma data</span>}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={newTransaction.date ? new Date(newTransaction.date) : undefined}
-                              onSelect={(date) => {
-                                if (date) {
-                                  setNewTransaction({
-                                    ...newTransaction, 
-                                    date: format(date, "yyyy-MM-dd")
-                                  });
-                                  setFormErrors({...formErrors, date: false});
-                                }
-                              }}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                      {formErrors.date && (
-                        <p className="text-fin-red text-xs">Este campo é obrigatório</p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select
-                      value={newTransaction.status}
-                      onValueChange={(value) => setNewTransaction({...newTransaction, status: value})}
-                    >
-                      <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
-                        <SelectValue placeholder="Escolha o status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="completed">Recebido</SelectItem>
-                        <SelectItem value="pending">Pendente</SelectItem>
-                        <SelectItem value="overdue">Atrasado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setIsDialogOpen(false);
-                    setFormErrors({});
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button 
-                  className="bg-fin-green text-black hover:bg-fin-green/90" 
-                  onClick={handleAddTransaction}
-                >
-                  Adicionar
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full sm:w-auto">
-                <Download className="mr-2 h-4 w-4" />
-                Exportar
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem>
-                Excel
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                PDF
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              <div className="flex items-center">
-                <div className="mr-2 p-2 bg-fin-green/10 rounded">
-                  <Check className="h-4 w-4 text-fin-green" />
-                </div>
-                Recebimentos Confirmados
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalReceived)}</div>
-            <p className="text-xs text-muted-foreground">
-              {dashboardData.incomeCount} recebimentos registrados
-            </p>
-            <div className="mt-4">
-              <span className="text-xs font-medium inline-flex items-center">
-                <ArrowUp className="h-3 w-3 mr-1 text-fin-green" /> Receita total do período
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              <div className="flex items-center">
-                <div className="mr-2 p-2 bg-amber-500/10 rounded">
-                  <Clock className="h-4 w-4 text-amber-500" />
-                </div>
-                Recebimentos Pendentes
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalPending)}</div>
-            <p className="text-xs text-muted-foreground">
-              {transactions.filter(tx => tx.status === 'pending').length} recebimentos pendentes
-            </p>
-            <div className="mt-4">
-              <span className="text-xs font-medium inline-flex items-center">
-                <CheckCircle className="h-3 w-3 mr-1" /> Valores a receber
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              <div className="flex items-center">
-                <div className="mr-2 p-2 bg-blue-500/10 rounded">
-                  <DollarSign className="h-4 w-4 text-blue-500" />
-                </div>
-                Média Mensal
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(dashboardData.monthlyAverage)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Média de receitas dos últimos 6 meses
-            </p>
-            <div className="mt-4">
-              <span className="text-xs font-medium inline-flex items-center">
-                <Repeat className="h-3 w-3 mr-1" /> Análise de recorrência
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <DateFilter 
-            dateRange={dateRange}
-            dateFilterMode={dateFilterMode}
-            onPrevMonth={() => setDateFilterMode("prev")}
-            onNextMonth={() => setDateFilterMode("next")}
-            onCurrentMonth={() => setDateFilterMode("current")}
-            onDateRangeChange={(range) => {
-              setDateRange(range);
-              setDateFilterMode("custom");
-            }}
-          />
-        </div>
-        
-        <div className="flex gap-2 w-full md:w-auto">
-          <div className="relative flex-1 md:flex-auto">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Buscar recebimentos..."
-              className="pl-8 w-full md:w-[250px]"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-1">
-                <Filter className="h-4 w-4" />
-                <span className="hidden sm:inline">Filtrar</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setFilterStatus(null)}>
-                Todos
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterStatus("pending")}>
-                Pendentes
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterStatus("completed")}>
-                Recebidos
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterStatus("overdue")}>
-                Atrasados
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-      
-      <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="mb-4">
-          <TabsTrigger value="all">Todos</TabsTrigger>
-          <TabsTrigger value="completed">Recebidos</TabsTrigger>
-          <TabsTrigger value="pending">Pendentes</TabsTrigger>
-          <TabsTrigger value="overdue">Atrasados</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="all" className="space-y-4">
-          <Card>
-            <CardContent className="p-0">
-              {loading ? (
-                <div className="flex justify-center items-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-              ) : transactions.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground">Nenhum recebimento encontrado.</p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactions
-                      .filter(transaction => {
-                        if (activeTab !== "all") {
-                          return transaction.status === activeTab;
-                        }
-                        return transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                               transaction.category.toLowerCase().includes(searchTerm.toLowerCase());
-                      })
-                      .map(transaction => (
-                        <TableRow key={transaction.id}>
-                          <TableCell className="font-medium">{transaction.description}</TableCell>
-                          <TableCell>
-                            {transaction.category}
-                          </TableCell>
-                          <TableCell>{transaction.date}</TableCell>
-                          <TableCell>
-                            <span className="text-fin-green flex items-center">
-                              <ArrowUp className="h-3 w-3 mr-1" />
-                              {transaction.value.toLocaleString('pt-BR', { 
-                                style: 'currency', 
-                                currency: 'BRL' 
-                              })}
-                            </span>
-                          </TableCell>
-                          <TableCell>{getStatusBadge(transaction.status)}</TableCell>
-                          <TableCell className="text-right flex justify-end items-center gap-2">
-                            {transaction.status !== "completed" && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-fin-green hover:text-fin-green/80 hover:bg-fin-green/10"
-                                onClick={async () => {
-                                  try {
-                                    if (!user) return;
-                                    
-                                    const { error } = await supabase
-                                      .from('transactions')
-                                      .update({
-                                        status: 'completed'
-                                      })
-                                      .eq('id', transaction.id);
-                                    
-                                    if (error) throw error;
-                                    
-                                    toast({
-                                      title: "Recebimento atualizado",
-                                      description: "O recebimento foi marcado como recebido com sucesso.",
-                                    });
-                                    
-                                    fetchTransactions();
-                                    calculateDashboardData();
-                                  } catch (error: any) {
-                                    toast({
-                                      title: "Erro ao atualizar recebimento",
-                                      description: error.message,
-                                      variant: "destructive"
-                                    });
-                                  }
-                                }}
-                                title="Marcar como recebido"
-                              >
-                                <CheckCircle className="h-4 w-4" />
-                              </Button>
+                    <div className="relative">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal bg-[#1F1F23] border-[#2A2A2E]",
+                              !newReceipt.date && "text-muted-foreground",
+                              formErrors.date && "border-red-500"
                             )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setSelectedTransaction(transaction);
-                                setIsUpdateSheetOpen(true);
-                              }}
-                              title="Editar recebimento"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {newReceipt.date ? format(new Date(newReceipt.date), "dd/MM/yyyy") : <span>Selecione uma data</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={newReceipt.date ? new Date(newReceipt.date) : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                setNewReceipt({
+                                  ...newReceipt, 
+                                  date: format(date, "yyyy-MM-dd")
+                                });
+                                setFormErrors({...formErrors, date: false});
+                              }
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    {formErrors.date && (
+                      <p className="text-red-500 text-xs mt-1">Data é obrigatória</p>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select
+                    value={newReceipt.status}
+                    onValueChange={(value) => setNewReceipt({...newReceipt, status: value})}
+                  >
+                    <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
+                      <SelectValue placeholder="Selecione o status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pendente</SelectItem>
+                      <SelectItem value="completed">Recebido</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsDialogOpen(false);
+                  setFormErrors({});
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                className="bg-fin-green text-black hover:bg-fin-green/90" 
+                onClick={handleCreateReceipt}
+              >
+                Salvar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="flex flex-col space-y-5">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg font-normal flex items-center">
+              <Inbox className="mr-2 h-5 w-5 text-fin-green" />
+              Recebimentos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col space-y-4">
+              <div className="flex justify-between items-center flex-wrap gap-2">
+                <div className="relative w-full max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Buscar recebimentos..."
+                    className="pl-8 bg-[#1F1F23] border-[#2A2A2E]"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                
+                <div className="flex flex-wrap gap-2 items-center">
+                  {/* Date filter component */}
+                  <DateFilter 
+                    dateRange={dateRange}
+                    dateFilterMode={dateFilterMode}
+                    onPrevMonth={handlePrevMonth}
+                    onNextMonth={handleNextMonth}
+                    onCurrentMonth={handleCurrentMonth}
+                    onDateRangeChange={handleDateRangeChange}
+                  />
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="border-[#2A2A2E] bg-[#1F1F23]">
+                        <Filter className="mr-2 h-4 w-4" /> Filtrar
+                        <ChevronDown className="ml-2 h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={() => setFilterStatus(null)}>
+                        Todos
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFilterStatus('pending')}>
+                        Pendentes
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setFilterStatus('completed')}>
+                        Recebidos
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  
+                  <Button variant="outline" className="border-[#2A2A2E] bg-[#1F1F23]">
+                    <Download className="mr-2 h-4 w-4" /> Exportar
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="rounded-md border border-[#2A2A2E]">
+                {loading ? (
+                  <div className="flex justify-center items-center p-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-fin-green" />
+                  </div>
+                ) : filteredReceipts.length === 0 ? (
+                  <div className="text-center p-8">
+                    <p className="text-muted-foreground">Nenhum recebimento encontrado</p>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-[#2A2A2E]">
+                          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Data</th>
+                          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Descrição</th>
+                          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Cliente</th>
+                          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Categoria</th>
+                          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Valor</th>
+                          <th className="text-left p-3 text-xs font-medium text-muted-foreground">Status</th>
+                          <th className="text-right p-3 text-xs font-medium text-muted-foreground">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredReceipts.map((receipt) => (
+                          <tr key={receipt.id} className="border-b border-[#2A2A2E] hover:bg-[#1F1F23]/50">
+                            <td className="p-3 text-sm">{receipt.date}</td>
+                            <td className="p-3 text-sm">{receipt.description}</td>
+                            <td className="p-3 text-sm">{receipt.client_name || "-"}</td>
+                            <td className="p-3 text-sm">{receipt.category}</td>
+                            <td className="p-3 text-sm font-medium text-fin-green">
+                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(receipt.value)}
+                            </td>
+                            <td className="p-3 text-sm">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(receipt.status)}`}>
+                                {getStatusText(receipt.status)}
+                              </span>
+                            </td>
+                            <td className="p-3 text-sm text-right">
+                              <div className="flex justify-end gap-2">
+                                {receipt.status === 'pending' ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-green-500 hover:text-green-400 hover:bg-green-500/10"
+                                    onClick={() => handleStatusChange(receipt.id, 'completed')}
+                                    title="Marcar como recebido"
+                                  >
+                                    <Check className="h-4 w-4" />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10"
+                                    onClick={() => handleStatusChange(receipt.id, 'pending')}
+                                    title="Marcar como pendente"
+                                  >
+                                    <Clock className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
+                                  onClick={() => openEditDialog(receipt)}
+                                  title="Editar"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                                      title="Excluir"
+                                    >
+                                      <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        className="h-4 w-4"
+                                      >
+                                        <path d="M3 6h18" />
+                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                        <line x1="10" y1="11" x2="10" y2="17" />
+                                        <line x1="14" y1="11" x2="14" y2="17" />
+                                      </svg>
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Excluir recebimento</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Tem certeza que deseja excluir este recebimento? Esta ação não pode ser desfeita.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction 
+                                        className="bg-red-600 text-white hover:bg-red-700"
+                                        onClick={() => handleDeleteReceipt(receipt.id)}
+                                      >
+                                        Excluir
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Edit Receipt Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] bg-[#1A1A1E] border-[#2A2A2E] text-white">
+          <DialogHeader>
+            <DialogTitle>Editar Recebimento</DialogTitle>
+            <DialogDescription>
+              Atualize as informações do recebimento.
+            </DialogDescription>
+          </DialogHeader>
+          {editingReceipt && (
+            <div className="grid gap-6 py-4">
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-description">Descrição</Label>
+                  <Input
+                    id="edit-description"
+                    placeholder="Ex: Pagamento de cliente, Venda, etc."
+                    className="bg-[#1F1F23] border-[#2A2A2E]"
+                    value={editingReceipt.description}
+                    onChange={(e) => setEditingReceipt({...editingReceipt, description: e.target.value})}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-client">Cliente</Label>
+                  <Select
+                    value={editingReceipt.client_id || ''}
+                    onValueChange={(value) => setEditingReceipt({...editingReceipt, client_id: value})}
+                  >
+                    <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
+                      <SelectValue placeholder="Selecione um cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map(client => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
                       ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="completed" className="space-y-4">
-          {/* Similar content as "all" tab but filtered for completed */}
-        </TabsContent>
-        
-        <TabsContent value="pending" className="space-y-4">
-          {/* Similar content as "all" tab but filtered for pending */}
-        </TabsContent>
-        
-        <TabsContent value="overdue" className="space-y-4">
-          {/* Similar content as "all" tab but filtered for overdue */}
-        </TabsContent>
-      </Tabs>
-      
-      {/* Update Transaction Sheet */}
-      <Sheet open={isUpdateSheetOpen && selectedTransaction !== null} onOpenChange={setIsUpdateSheetOpen}>
-        <SheetContent className="sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Detalhes do Recebimento</SheetTitle>
-            <SheetDescription>
-              Visualize e atualize os detalhes do recebimento.
-            </SheetDescription>
-          </SheetHeader>
-          {selectedTransaction && (
-            <div className="space-y-4 py-4">
-              <div className="grid gap-2">
-                <Label>Descrição</Label>
-                <Input
-                  value={selectedTransaction.description}
-                  onChange={(e) => setSelectedTransaction({...selectedTransaction, description: e.target.value})}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Categoria</Label>
-                <Select
-                  value={selectedTransaction.category_id || ""}
-                  onValueChange={(value) => setSelectedTransaction({...selectedTransaction, category_id: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map(category => (
-                      <SelectItem key={category.id} value={category.id}>
-                        <div className="flex items-center">
-                          <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: category.color }} />
-                          {category.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Valor</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={selectedTransaction.value}
-                    onChange={(e) => setSelectedTransaction({...selectedTransaction, value: parseFloat(e.target.value)})}
-                  />
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="grid gap-2">
-                  <Label>Data</Label>
-                  <Input
-                    type="text"
-                    value={selectedTransaction.date}
-                    readOnly
-                  />
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-category">Categoria</Label>
+                  <Select
+                    value={editingReceipt.category_id || ''}
+                    onValueChange={(value) => setEditingReceipt({...editingReceipt, category_id: value})}
+                  >
+                    <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
+                      <SelectValue placeholder="Selecione uma categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map(category => (
+                        <SelectItem key={category.id} value={category.id}>
+                          <div className="flex items-center">
+                            <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: category.color }} />
+                            {category.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Status</Label>
-                <Select
-                  value={selectedTransaction.status}
-                  onValueChange={(value) => setSelectedTransaction({...selectedTransaction, status: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="completed">Recebido</SelectItem>
-                    <SelectItem value="pending">Pendente</SelectItem>
-                    <SelectItem value="overdue">Atrasado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex justify-between pt-4">
-                <Button
-                  variant="destructive"
-                  onClick={async () => {
-                    try {
-                      if (!user || !selectedTransaction) return;
-                      
-                      const { error } = await supabase
-                        .from('transactions')
-                        .delete()
-                        .eq('id', selectedTransaction.id);
-                      
-                      if (error) throw error;
-                      
-                      toast({
-                        title: "Recebimento excluído",
-                        description: "O recebimento foi excluído com sucesso.",
-                      });
-                      
-                      setIsUpdateSheetOpen(false);
-                      fetchTransactions();
-                      calculateDashboardData();
-                    } catch (error: any) {
-                      toast({
-                        title: "Erro ao excluir recebimento",
-                        description: error.message,
-                        variant: "destructive"
-                      });
-                    }
-                  }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                </Button>
-                <Button
-                  onClick={async () => {
-                    try {
-                      if (!user || !selectedTransaction) return;
-                      
-                      // Find the category name
-                      let categoryName = selectedTransaction.category;
-                      if (selectedTransaction.category_id) {
-                        const category = categories.find(c => c.id === selectedTransaction.category_id);
-                        if (category) {
-                          categoryName = category.name;
-                        }
-                      }
-                      
-                      const { error } = await supabase
-                        .from('transactions')
-                        .update({
-                          description: selectedTransaction.description,
-                          category: categoryName,
-                          category_id: selectedTransaction.category_id,
-                          value: selectedTransaction.value,
-                          status: selectedTransaction.status
-                        })
-                        .eq('id', selectedTransaction.id);
-                      
-                      if (error) throw error;
-                      
-                      toast({
-                        title: "Recebimento atualizado",
-                        description: "O recebimento foi atualizado com sucesso.",
-                      });
-                      
-                      setIsUpdateSheetOpen(false);
-                      fetchTransactions();
-                      calculateDashboardData();
-                    } catch (error: any) {
-                      toast({
-                        title: "Erro ao atualizar recebimento",
-                        description: error.message,
-                        variant: "destructive"
-                      });
-                    }
-                  }}
-                >
-                  Salvar alterações
-                </Button>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-value">Valor</Label>
+                    <Input
+                      id="edit-value"
+                      type="number"
+                      step="0.01"
+                      placeholder="0,00"
+                      className="bg-[#1F1F23] border-[#2A2A2E]"
+                      value={editingReceipt.value}
+                      onChange={(e) => setEditingReceipt({...editingReceipt, value: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-date">Data</Label>
+                    <div className="relative">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal bg-[#1F1F23] border-[#2A2A2E]"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {editingReceipt.date ? format(new Date(editingReceipt.date), "dd/MM/yyyy") : <span>Selecione uma data</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={editingReceipt.date ? new Date(editingReceipt.date) : undefined}
+                            onSelect={(date) => date && setEditingReceipt({
+                              ...editingReceipt, 
+                              date: format(date, "yyyy-MM-dd")
+                            })}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-status">Status</Label>
+                  <Select
+                    value={editingReceipt.status}
+                    onValueChange={(value) => setEditingReceipt({...editingReceipt, status: value})}
+                  >
+                    <SelectTrigger className="bg-[#1F1F23] border-[#2A2A2E]">
+                      <SelectValue placeholder="Selecione o status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pendente</SelectItem>
+                      <SelectItem value="completed">Recebido</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsEditDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              className="bg-fin-green text-black hover:bg-fin-green/90" 
+              onClick={handleEditReceipt}
+            >
+              Salvar alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
