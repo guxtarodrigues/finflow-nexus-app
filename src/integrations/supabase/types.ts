@@ -47,8 +47,10 @@ export type Database = {
           description: string | null
           email: string | null
           id: string
+          last_payment_date: string | null
           monthly_value: number | null
           name: string
+          payment_status: string | null
           phone: string | null
           recurring_payment: boolean | null
           status: string | null
@@ -62,8 +64,10 @@ export type Database = {
           description?: string | null
           email?: string | null
           id?: string
+          last_payment_date?: string | null
           monthly_value?: number | null
           name: string
+          payment_status?: string | null
           phone?: string | null
           recurring_payment?: boolean | null
           status?: string | null
@@ -77,8 +81,10 @@ export type Database = {
           description?: string | null
           email?: string | null
           id?: string
+          last_payment_date?: string | null
           monthly_value?: number | null
           name?: string
+          payment_status?: string | null
           phone?: string | null
           recurring_payment?: boolean | null
           status?: string | null

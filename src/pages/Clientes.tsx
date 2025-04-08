@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   Users, 
@@ -13,7 +12,8 @@ import {
   XCircle,
   CheckCircle,
   ArrowUp,
-  Clock
+  Clock,
+  Trash2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,7 @@ import { ClientTransactionsList } from "@/components/clients/ClientTransactionsL
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClientCard } from "@/components/clients/ClientCard";
 import { MetricCard } from "@/components/dashboard/MetricCard";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 
 const Clientes = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -67,6 +68,7 @@ const Clientes = () => {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [viewMode, setViewMode] = useState<"all" | "monthly">("all");
@@ -170,7 +172,6 @@ const Clientes = () => {
         user_id: user.id
       };
       
-      // Step 1: Insert the client data
       const { data: clientResult, error: clientError } = await supabase
         .from('clients')
         .insert(clientData)
@@ -179,7 +180,6 @@ const Clientes = () => {
       
       if (clientError) throw clientError;
       
-      // Step 2: If client has recurring payment and monthly value, create a transaction
       if (newClient.recurring_payment && newClient.monthly_value && newClient.monthly_value > 0) {
         const currentDate = new Date();
         const transactionData = {
@@ -263,6 +263,14 @@ const Clientes = () => {
     }
   };
   
+  const confirmDeleteClient = () => {
+    if (selectedClient) {
+      setIsDeleteDialogOpen(false);
+      handleDeleteClient(selectedClient.id);
+      setIsEditSheetOpen(false);
+    }
+  };
+  
   const handleUpdateClient = async () => {
     try {
       if (!selectedClient) return;
@@ -334,7 +342,6 @@ const Clientes = () => {
   
   const filteredClients = getFilteredClients();
   
-  // Calculate metrics
   const monthlyRevenue = clients
     .filter(client => client.status === 'active')
     .reduce((sum, client) => sum + (client.monthly_value || 0), 0);
@@ -366,7 +373,6 @@ const Clientes = () => {
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Monthly Revenue */}
         <MetricCard
           title="Receita Mensal"
           value={formatCurrency(monthlyRevenue)}
@@ -374,7 +380,6 @@ const Clientes = () => {
           icon="income"
         />
         
-        {/* Yearly Revenue */}
         <MetricCard
           title="Receita Anual"
           value={formatCurrency(yearlyRevenue)}
@@ -382,7 +387,6 @@ const Clientes = () => {
           icon="savings"
         />
         
-        {/* Active Clients */}
         <MetricCard
           title="Clientes Ativos"
           value={activeClientsCount.toString()}
@@ -865,13 +869,21 @@ const Clientes = () => {
                     />
                   </div>
                   
-                  <div className="flex justify-end gap-2 pt-4">
-                    <Button variant="outline" onClick={() => setIsEditSheetOpen(false)}>
-                      Cancelar
+                  <div className="flex justify-between gap-2 pt-4">
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => setIsDeleteDialogOpen(true)}
+                    >
+                      Excluir Cliente
                     </Button>
-                    <Button className="bg-fin-green text-black hover:bg-fin-green/90" onClick={handleUpdateClient}>
-                      Salvar alterações
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setIsEditSheetOpen(false)}>
+                        Cancelar
+                      </Button>
+                      <Button className="bg-fin-green text-black hover:bg-fin-green/90" onClick={handleUpdateClient}>
+                        Salvar alterações
+                      </Button>
+                    </div>
                   </div>
                 </TabsContent>
                 <TabsContent value="transactions" className="mt-4">
@@ -885,6 +897,26 @@ const Clientes = () => {
           )}
         </SheetContent>
       </Sheet>
+      
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent className="bg-[#1A1A1E] border-[#2A2A2E]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Cliente</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este cliente? Esta ação não pode ser desfeita e todos os dados relacionados ao cliente serão perdidos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-[#1F1F23] border-[#2A2A2E]">Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmDeleteClient}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
