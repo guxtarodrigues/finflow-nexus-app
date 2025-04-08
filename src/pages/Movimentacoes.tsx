@@ -500,7 +500,6 @@ const Movimentacoes = () => {
                     onNextMonth={handleNextMonth}
                     onCurrentMonth={handleCurrentMonth}
                     onDateRangeChange={handleDateRangeChange}
-                    currentDate={currentDate}
                   />
                   
                   <DropdownMenu>

@@ -11,10 +11,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Check, RefreshCcw } from "lucide-react";
-import { format, addMonths, parseISO, isAfter, isBefore } from "date-fns";
+import { format, addMonths, parseISO } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
 
 interface Transaction {
   id: string;
@@ -37,7 +36,6 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const { toast } = useToast();
-  const { user } = useAuth();
 
   const fetchTransactions = async () => {
     try {
@@ -85,11 +83,11 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             
             const getOccurrences = (recurrenceType: string) => {
               switch (recurrenceType) {
-                case 'monthly': return 24; // Show for 2 years
-                case 'bimonthly': return 12; // Show for 2 years
-                case 'quarterly': return 8; // Show for 2 years
-                case 'biannual': return 4; // Show for 2 years
-                case 'annual': return 2; // Show for 2 years
+                case 'monthly': return 12; // Show for a year
+                case 'bimonthly': return 6; // Show for a year
+                case 'quarterly': return 4; // Show for a year
+                case 'biannual': return 2; // Show for a year
+                case 'annual': return 1; // Show for a year
                 default: return 0;
               }
             };
@@ -97,82 +95,31 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             const monthsToAdd = getMonthsToAdd(transaction.recurrence);
             const occurrences = getOccurrences(transaction.recurrence);
             const originalDate = new Date(transaction.date);
+            const currentDate = new Date();
             
-            // Add future occurrences regardless of current date
+            // Only show future occurrences
             if (monthsToAdd > 0) {
               for (let i = 1; i <= occurrences; i++) {
                 const futureDate = addMonths(originalDate, monthsToAdd * i);
                 
-                processedTransactions.push({
-                  id: `${transaction.id}-recurrence-${i}`,
-                  date: format(futureDate, 'dd/MM/yyyy'),
-                  description: `${transaction.description} (Recorrente)`,
-                  category: transaction.category,
-                  type: transaction.type,
-                  value: Number(transaction.value),
-                  status: 'pending',
-                  recurrence: transaction.recurrence,
-                  recurrence_count: i
-                });
+                // Only include future dates
+                if (futureDate > currentDate) {
+                  processedTransactions.push({
+                    id: `${transaction.id}-recurrence-${i}`,
+                    date: format(futureDate, 'dd/MM/yyyy'),
+                    description: `${transaction.description} (Recorrente)`,
+                    category: transaction.category,
+                    type: transaction.type,
+                    value: Number(transaction.value),
+                    status: 'pending',
+                    recurrence: transaction.recurrence,
+                    recurrence_count: i
+                  });
+                }
               }
             }
           }
         });
-        
-        // Check for contract-based recurring income
-        const { data: clientData, error: clientError } = await supabase
-          .from('clients')
-          .select('*')
-          .eq('id', clientId)
-          .single();
-          
-        if (!clientError && clientData && clientData.monthly_value && 
-            clientData.recurring_payment && 
-            clientData.status === 'active' && 
-            clientData.contract_start) {
-          
-          // Add monthly contract payments
-          const contractStartDate = new Date(clientData.contract_start);
-          const contractEndDate = clientData.contract_end ? new Date(clientData.contract_end) : addMonths(new Date(), 24); // Default to 2 years if no end date
-          
-          let currentDate = new Date(contractStartDate);
-          let paymentCount = 0;
-          
-          // Generate monthly payments from contract start until contract end or 24 months
-          while (currentDate <= contractEndDate && paymentCount < 24) {
-            // Skip if it's before the contract start
-            if (currentDate >= contractStartDate) {
-              const paymentDate = format(currentDate, 'dd/MM/yyyy');
-              
-              // Don't add duplicate payments for the same month
-              if (!processedTransactions.some(t => 
-                  format(parseISO(t.date.split('/').reverse().join('-')), 'yyyy-MM') === 
-                  format(currentDate, 'yyyy-MM') && 
-                  t.description.includes('Contrato'))) {
-                
-                // Create a unique transaction ID for contract-based payments using UUID format
-                // We'll use the actual transaction ID if it exists in the database
-                const yearMonth = format(currentDate, 'yyyy-MM');
-                const contractTransactionId = `contract-${yearMonth}-${clientId.substring(0, 8)}`;
-                
-                processedTransactions.push({
-                  id: contractTransactionId,
-                  date: paymentDate,
-                  description: `Contrato mensal - ${clientData.name}`,
-                  category: 'Contrato',
-                  type: 'income',
-                  value: Number(clientData.monthly_value),
-                  status: 'pending',
-                  recurrence: 'monthly',
-                  recurrence_count: paymentCount
-                });
-              }
-            }
-            
-            currentDate = addMonths(currentDate, 1);
-            paymentCount++;
-          }
-        }
         
         // Sort transactions by date (newest first)
         processedTransactions.sort((a, b) => {
@@ -199,10 +146,10 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
     fetchTransactions();
   }, [clientId]);
 
-  const handleMarkAsReceived = async (transaction: Transaction) => {
+  const handleMarkAsReceived = async (id: string) => {
     try {
       // Skip for recurring transactions that don't exist in the database yet
-      if (transaction.id.includes('recurrence')) {
+      if (id.includes('recurrence')) {
         toast({
           title: "Operação não permitida",
           description: "Não é possível marcar como recebido um pagamento recorrente futuro.",
@@ -211,54 +158,12 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
         return;
       }
       
-      // Skip for contract-based transactions that are generated on the fly
-      if (transaction.id.startsWith('contract-')) {
-        // For contract transactions, we need to create a real transaction record
-        setProcessingId(transaction.id);
-        
-        // Parse the date from display format to ISO format
-        const dateParts = transaction.date.split('/');
-        const isoDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
-        
-        // Check if user is available
-        if (!user || !user.id) {
-          throw new Error("Usuário não autenticado");
-        }
-        
-        // Insert a new transaction record for this contract payment
-        const { data: newTransaction, error: insertError } = await supabase
-          .from('transactions')
-          .insert({
-            description: transaction.description,
-            date: isoDate,
-            value: transaction.value,
-            category: transaction.category,
-            type: 'income',
-            status: 'completed',
-            client_id: clientId,
-            user_id: user.id // Add the user_id field that was missing
-          })
-          .select()
-          .single();
-        
-        if (insertError) throw insertError;
-        
-        toast({
-          title: "Recebimento confirmado",
-          description: "O recebimento do contrato foi registrado com sucesso",
-        });
-        
-        fetchTransactions();
-        return;
-      }
-      
-      // For regular transactions that exist in the database
-      setProcessingId(transaction.id);
+      setProcessingId(id);
       
       const { error } = await supabase
         .from('transactions')
         .update({ status: 'completed' })
-        .eq('id', transaction.id);
+        .eq('id', id);
 
       if (error) throw error;
       
@@ -335,11 +240,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             transactions.map((transaction) => (
               <TableRow 
                 key={transaction.id} 
-                className={`hover:bg-[#1F1F23] border-[#2A2A2E] ${
-                  transaction.id.includes('recurrence') || transaction.id.startsWith('contract-') 
-                    ? 'bg-[#1A1A1E]/30' 
-                    : ''
-                }`}
+                className={`hover:bg-[#1F1F23] border-[#2A2A2E] ${transaction.id.includes('recurrence') ? 'bg-[#1A1A1E]/30' : ''}`}
               >
                 <TableCell className="font-medium">
                   {transaction.date}
@@ -364,18 +265,18 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
                 <TableCell>
                   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(transaction.status)}`}>
                     {getStatusText(transaction.status)}
-                    {(transaction.recurrence_count || transaction.id.startsWith('contract-')) && transaction.status === 'pending' && (
+                    {transaction.recurrence_count && (
                       <span className="ml-1 text-xs text-fin-green"> (Futuro)</span>
                     )}
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
-                  {transaction.status === 'pending' && (
+                  {transaction.status === 'pending' && !transaction.id.includes('recurrence') && (
                     <Button 
                       variant="receipt" 
                       size="icon" 
                       className="h-8 w-8"
-                      onClick={() => handleMarkAsReceived(transaction)}
+                      onClick={() => handleMarkAsReceived(transaction.id)}
                       disabled={processingId === transaction.id}
                     >
                       {processingId === transaction.id ? (

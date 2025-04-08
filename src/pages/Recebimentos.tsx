@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { 
   ArrowLeftRight, 
@@ -64,10 +65,6 @@ interface Receipt {
   client_id?: string;
   client_name?: string;
   source?: string;
-  type?: string;
-  user_id?: string;
-  created_at?: string;
-  updated_at?: string;
 }
 
 interface Category {
@@ -80,11 +77,6 @@ interface Category {
 interface Client {
   id: string;
   name: string;
-  monthly_value?: number;
-  recurring_payment?: boolean;
-  contract_start?: string;
-  contract_end?: string;
-  status?: string;
 }
 
 interface Transaction {
@@ -100,9 +92,6 @@ interface Transaction {
   user_id: string;
   created_at: string;
   updated_at: string;
-  recurrence?: string;
-  recurrence_count?: number;
-  source?: string;
 }
 
 const Recebimentos = () => {
@@ -217,7 +206,7 @@ const Recebimentos = () => {
       
       const { data, error } = await supabase
         .from('clients')
-        .select('id, name, monthly_value, recurring_payment, contract_start, contract_end, status')
+        .select('id, name')
         .eq('user_id', user.id);
       
       if (error) throw error;
@@ -251,6 +240,7 @@ const Recebimentos = () => {
         .gte('date', dateRange.from.toISOString())
         .lte('date', dateRange.to.toISOString());
       
+      // Apply status filter if set
       if (filterStatus) {
         query = query.eq('status', filterStatus);
       }
@@ -276,7 +266,7 @@ const Recebimentos = () => {
         if (clientIds.length > 0) {
           const { data: clientsData, error: clientsError } = await supabase
             .from('clients')
-            .select('id, name, monthly_value, recurring_payment, contract_start, contract_end, status')
+            .select('id, name')
             .in('id', clientIds);
           
           if (clientsError) throw clientsError;
@@ -285,105 +275,11 @@ const Recebimentos = () => {
             clientsData.forEach(client => {
               clientsMap.set(client.id, { id: client.id, name: client.name });
             });
-            
-            const processedReceipts: Receipt[] = [];
-            
-            for (const client of clientsData) {
-              if (client.monthly_value && client.recurring_payment && client.status === 'active' && client.contract_start) {
-                const contractStartDate = new Date(client.contract_start);
-                const contractEndDate = client.contract_end ? new Date(client.contract_end) : addMonths(new Date(), 24);
-                
-                let currentDate = new Date(contractStartDate);
-                let paymentCount = 0;
-                
-                while (currentDate <= contractEndDate && paymentCount < 24) {
-                  if (currentDate >= dateRange.from && currentDate <= dateRange.to) {
-                    processedReceipts.push({
-                      id: `contract-${client.id}-${format(currentDate, 'yyyy-MM')}`,
-                      date: format(currentDate, 'dd/MM/yyyy'),
-                      description: `Contrato mensal - ${client.name}`,
-                      category: 'Contrato',
-                      category_id: '',
-                      value: Number(client.monthly_value),
-                      status: 'pending',
-                      client_id: client.id,
-                      client_name: client.name,
-                      source: 'contract',
-                      type: 'income',
-                      user_id: user.id,
-                      created_at: new Date().toISOString(),
-                      updated_at: new Date().toISOString()
-                    });
-                  }
-                  
-                  currentDate = addMonths(currentDate, 1);
-                  paymentCount++;
-                }
-              }
-            }
-            
-            for (const transaction of typedTransactions) {
-              if (transaction.recurrence && transaction.recurrence !== 'once') {
-                const getMonthsToAdd = (recurrenceType: string) => {
-                  switch (recurrenceType) {
-                    case 'monthly': return 1;
-                    case 'bimonthly': return 2;
-                    case 'quarterly': return 3;
-                    case 'biannual': return 6;
-                    case 'annual': return 12;
-                    default: return 0;
-                  }
-                };
-                
-                const monthsToAdd = getMonthsToAdd(transaction.recurrence);
-                
-                if (monthsToAdd > 0) {
-                  const originalDate = new Date(transaction.date);
-                  
-                  for (let i = 1; i <= 24; i++) {
-                    const futureDate = addMonths(originalDate, monthsToAdd * i);
-                    
-                    if (futureDate >= dateRange.from && futureDate <= dateRange.to) {
-                      const client = transaction.client_id ? clientsMap.get(transaction.client_id) : null;
-                      
-                      processedReceipts.push({
-                        id: `recurrence-${transaction.id}-${i}`,
-                        date: format(futureDate, 'dd/MM/yyyy'),
-                        description: `${transaction.description} (Recorrente)`,
-                        category: transaction.category,
-                        category_id: transaction.category_id || '',
-                        value: Number(transaction.value),
-                        status: 'pending',
-                        client_id: transaction.client_id || undefined,
-                        client_name: client ? client.name : undefined,
-                        source: 'recurring',
-                        type: 'income',
-                        user_id: user.id,
-                        created_at: transaction.created_at,
-                        updated_at: transaction.updated_at
-                      });
-                    }
-                  }
-                }
-              }
-            }
-            
-            const receiptTransactions: Transaction[] = processedReceipts.map(receipt => ({
-              ...receipt,
-              type: 'income',
-              user_id: user.id,
-              created_at: receipt.created_at || new Date().toISOString(),
-              updated_at: receipt.updated_at || new Date().toISOString(),
-              client_id: receipt.client_id || null,
-              category_id: receipt.category_id || null,
-              source: receipt.source,
-            }));
-            
-            typedTransactions.push(...receiptTransactions);
           }
         }
       }
       
+      // Also fetch payment data for completed payments received (representing income)
       let paymentsData: any[] = [];
       
       try {
@@ -401,9 +297,11 @@ const Recebimentos = () => {
         }
       } catch (error) {
         console.error('Error fetching payments:', error);
+        // Continue without payments data
       }
       
-      let formattedTransactions = typedTransactions.map((item) => {
+      // Format the transactions into receipts
+      const formattedTransactions = typedTransactions.map((item) => {
         const client = item.client_id ? clientsMap.get(item.client_id) : null;
         
         return {
@@ -416,14 +314,11 @@ const Recebimentos = () => {
           status: item.status,
           client_id: item.client_id || undefined,
           client_name: client ? client.name : undefined,
-          source: item.source || 'transaction',
-          type: item.type,
-          user_id: item.user_id,
-          created_at: item.created_at,
-          updated_at: item.updated_at
+          source: 'transaction'
         };
       });
       
+      // Format the payments into receipts
       const formattedPayments = paymentsData.map((payment) => {
         const client = payment.client_id ? clientsMap.get(payment.client_id) : null;
         
@@ -434,23 +329,22 @@ const Recebimentos = () => {
           category: payment.category || 'Pagamento',
           category_id: payment.category_id || '',
           value: Number(payment.value),
-          status: 'completed',
+          status: 'completed', // All included payments are completed
           client_id: payment.client_id || undefined,
           client_name: client ? client.name : payment.recipient,
-          source: 'payment',
-          type: 'income',
-          user_id: payment.user_id,
-          created_at: payment.created_at,
-          updated_at: payment.updated_at
+          source: 'payment'
         };
       });
       
+      // Combine all receipts
       let allReceipts = [...formattedTransactions, ...formattedPayments];
       
+      // Apply source filter if set
       if (filterSource) {
         allReceipts = allReceipts.filter(receipt => receipt.source === filterSource);
       }
       
+      // Sort by date (newest first)
       allReceipts.sort((a, b) => {
         const dateA = new Date(a.date.split('/').reverse().join('-'));
         const dateB = new Date(b.date.split('/').reverse().join('-'));
@@ -648,6 +542,7 @@ const Recebimentos = () => {
   };
 
   const openEditDialog = (receipt: Receipt) => {
+    // Only allow editing transactions, not payments
     if (receipt.source === 'payment') {
       toast({
         title: "Edição não permitida",
@@ -1007,7 +902,6 @@ const Recebimentos = () => {
                     onNextMonth={handleNextMonth}
                     onCurrentMonth={handleCurrentMonth}
                     onDateRangeChange={handleDateRangeChange}
-                    currentDate={currentDate}
                   />
                   
                   <DropdownMenu>
