@@ -68,17 +68,6 @@ export const ClientCard = ({ client, onEdit, onDelete, onStatusChange }: ClientC
     try {
       setProcessingId(client.id);
       
-      // Update client payment status to received
-      const { error: clientUpdateError } = await supabase
-        .from('clients')
-        .update({ 
-          payment_status: 'received',
-          last_payment_date: new Date().toISOString()
-        })
-        .eq('id', client.id);
-        
-      if (clientUpdateError) throw clientUpdateError;
-      
       // Create a transaction record for the received payment
       const { error } = await supabase
         .from('transactions')
@@ -107,41 +96,6 @@ export const ClientCard = ({ client, onEdit, onDelete, onStatusChange }: ClientC
       console.error('Error registering payment:', error);
       toast({
         title: "Erro ao registrar pagamento",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleMarkAsPending = async () => {
-    try {
-      setProcessingId(client.id);
-      
-      // Update client payment status to pending
-      const { error: clientUpdateError } = await supabase
-        .from('clients')
-        .update({ 
-          payment_status: 'pending',
-          last_payment_date: null
-        })
-        .eq('id', client.id);
-        
-      if (clientUpdateError) throw clientUpdateError;
-      
-      toast({
-        title: "Status atualizado",
-        description: "Pagamento marcado como pendente",
-      });
-      
-      if (onStatusChange) {
-        onStatusChange();
-      }
-    } catch (error: any) {
-      console.error('Error updating payment status:', error);
-      toast({
-        title: "Erro ao atualizar status",
         description: error.message,
         variant: "destructive"
       });
@@ -198,27 +152,6 @@ export const ClientCard = ({ client, onEdit, onDelete, onStatusChange }: ClientC
             </span>
           </div>
           
-          {/* Payment status badge */}
-          {client.payment_status && (
-            <div className="flex items-center gap-2">
-              <Badge 
-                variant="outline" 
-                className={`${
-                  client.payment_status === 'received' 
-                    ? 'bg-green-500/10 text-green-500' 
-                    : 'bg-amber-500/10 text-amber-500'
-                }`}
-              >
-                {client.payment_status === 'received' ? 'Pago' : 'Pendente'}
-              </Badge>
-              {client.last_payment_date && client.payment_status === 'received' && (
-                <span className="text-xs text-muted-foreground">
-                  {format(new Date(client.last_payment_date), 'dd/MM/yyyy')}
-                </span>
-              )}
-            </div>
-          )}
-          
           {client.description && (
             <div className="mt-2 text-sm text-muted-foreground">
               <p className="line-clamp-2">{client.description}</p>
@@ -238,37 +171,19 @@ export const ClientCard = ({ client, onEdit, onDelete, onStatusChange }: ClientC
         </Button>
         
         {client.status === 'active' && client.monthly_value && (
-          <>
-            {client.payment_status === 'pending' ? (
-              <Button 
-                variant="receipt" 
-                size="icon"
-                onClick={handleMarkAsReceived}
-                disabled={processingId === client.id}
-                className="rounded-full w-8 h-8"
-              >
-                {processingId === client.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CircleDollarSign className="h-4 w-4" />
-                )}
-              </Button>
+          <Button 
+            variant="receipt" 
+            size="icon"
+            onClick={handleMarkAsReceived}
+            disabled={processingId === client.id}
+            className="rounded-full w-8 h-8"
+          >
+            {processingId === client.id ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Button 
-                variant="outline" 
-                size="icon"
-                onClick={handleMarkAsPending}
-                disabled={processingId === client.id}
-                className="rounded-full w-8 h-8"
-              >
-                {processingId === client.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <XCircle className="h-4 w-4" />
-                )}
-              </Button>
+              <CircleDollarSign className="h-4 w-4" />
             )}
-          </>
+          </Button>
         )}
       </CardFooter>
     </Card>
