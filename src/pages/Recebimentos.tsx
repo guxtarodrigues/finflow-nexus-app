@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   ArrowLeftRight, 
@@ -77,6 +76,11 @@ interface Category {
 interface Client {
   id: string;
   name: string;
+  monthly_value?: number;
+  recurring_payment?: boolean;
+  contract_start?: string;
+  contract_end?: string;
+  status?: string;
 }
 
 interface Transaction {
@@ -92,6 +96,7 @@ interface Transaction {
   user_id: string;
   created_at: string;
   updated_at: string;
+  recurrence?: string;
 }
 
 const Recebimentos = () => {
@@ -206,7 +211,7 @@ const Recebimentos = () => {
       
       const { data, error } = await supabase
         .from('clients')
-        .select('id, name')
+        .select('id, name, monthly_value, recurring_payment, contract_start, contract_end, status')
         .eq('user_id', user.id);
       
       if (error) throw error;
@@ -266,7 +271,7 @@ const Recebimentos = () => {
         if (clientIds.length > 0) {
           const { data: clientsData, error: clientsError } = await supabase
             .from('clients')
-            .select('id, name')
+            .select('id, name, monthly_value, recurring_payment, contract_start, contract_end, status')
             .in('id', clientIds);
           
           if (clientsError) throw clientsError;
@@ -275,6 +280,89 @@ const Recebimentos = () => {
             clientsData.forEach(client => {
               clientsMap.set(client.id, { id: client.id, name: client.name });
             });
+            
+            // Process contract-based recurrent income
+            const processedReceipts: Receipt[] = [];
+            
+            for (const client of clientsData) {
+              if (client.monthly_value && client.recurring_payment && client.status === 'active' && client.contract_start) {
+                const contractStartDate = new Date(client.contract_start);
+                const contractEndDate = client.contract_end ? new Date(client.contract_end) : addMonths(new Date(), 24);
+                
+                let currentDate = new Date(contractStartDate);
+                let paymentCount = 0;
+                
+                // Generate monthly payments from contract start until contract end or 24 months
+                while (currentDate <= contractEndDate && paymentCount < 24) {
+                  // Only include if it falls within our date range
+                  if (currentDate >= dateRange.from && currentDate <= dateRange.to) {
+                    processedReceipts.push({
+                      id: `contract-${client.id}-${format(currentDate, 'yyyy-MM')}`,
+                      date: format(currentDate, 'dd/MM/yyyy'),
+                      description: `Contrato mensal - ${client.name}`,
+                      category: 'Contrato',
+                      category_id: '',
+                      value: Number(client.monthly_value),
+                      status: 'pending',
+                      client_id: client.id,
+                      client_name: client.name,
+                      source: 'contract'
+                    });
+                  }
+                  
+                  currentDate = addMonths(currentDate, 1);
+                  paymentCount++;
+                }
+              }
+            }
+            
+            // Also process recurring transactions from already added transactions
+            for (const transaction of typedTransactions) {
+              if (transaction.recurrence && transaction.recurrence !== 'once') {
+                const getMonthsToAdd = (recurrenceType: string) => {
+                  switch (recurrenceType) {
+                    case 'monthly': return 1;
+                    case 'bimonthly': return 2;
+                    case 'quarterly': return 3;
+                    case 'biannual': return 6;
+                    case 'annual': return 12;
+                    default: return 0;
+                  }
+                };
+                
+                const monthsToAdd = getMonthsToAdd(transaction.recurrence);
+                
+                if (monthsToAdd > 0) {
+                  const originalDate = new Date(transaction.date);
+                  
+                  // Generate up to 24 future occurrences
+                  for (let i = 1; i <= 24; i++) {
+                    const futureDate = addMonths(originalDate, monthsToAdd * i);
+                    
+                    // Only include if it falls within our date range
+                    if (futureDate >= dateRange.from && futureDate <= dateRange.to) {
+                      const client = transaction.client_id ? clientsMap.get(transaction.client_id) : null;
+                      
+                      processedReceipts.push({
+                        id: `recurrence-${transaction.id}-${i}`,
+                        date: format(futureDate, 'dd/MM/yyyy'),
+                        description: `${transaction.description} (Recorrente)`,
+                        category: transaction.category,
+                        category_id: transaction.category_id || '',
+                        value: Number(transaction.value),
+                        status: 'pending',
+                        client_id: transaction.client_id || undefined,
+                        client_name: client ? client.name : undefined,
+                        source: 'recurring'
+                      });
+                    }
+                  }
+                }
+              }
+            }
+            
+            // Add these to our list for display
+            typedTransactions.push(...processedReceipts);
           }
         }
       }
@@ -314,7 +402,7 @@ const Recebimentos = () => {
           status: item.status,
           client_id: item.client_id || undefined,
           client_name: client ? client.name : undefined,
-          source: 'transaction'
+          source: item.source || 'transaction'
         };
       });
       
