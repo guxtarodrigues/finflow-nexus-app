@@ -64,6 +64,10 @@ interface Receipt {
   client_id?: string;
   client_name?: string;
   source?: string;
+  type?: string;
+  user_id?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface Category {
@@ -97,6 +101,8 @@ interface Transaction {
   created_at: string;
   updated_at: string;
   recurrence?: string;
+  recurrence_count?: number;
+  source?: string;
 }
 
 const Recebimentos = () => {
@@ -306,7 +312,11 @@ const Recebimentos = () => {
                       status: 'pending',
                       client_id: client.id,
                       client_name: client.name,
-                      source: 'contract'
+                      source: 'contract',
+                      type: 'income',
+                      user_id: user.id,
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString()
                     });
                   }
                   
@@ -353,7 +363,11 @@ const Recebimentos = () => {
                         status: 'pending',
                         client_id: transaction.client_id || undefined,
                         client_name: client ? client.name : undefined,
-                        source: 'recurring'
+                        source: 'recurring',
+                        type: 'income',
+                        user_id: user.id,
+                        created_at: transaction.created_at,
+                        updated_at: transaction.updated_at
                       });
                     }
                   }
@@ -362,7 +376,18 @@ const Recebimentos = () => {
             }
             
             // Add these to our list for display
-            typedTransactions.push(...processedReceipts);
+            const receiptTransactions: Transaction[] = processedReceipts.map(receipt => ({
+              ...receipt,
+              type: 'income',
+              user_id: user.id,
+              created_at: receipt.created_at || new Date().toISOString(),
+              updated_at: receipt.updated_at || new Date().toISOString(),
+              client_id: receipt.client_id || null,
+              category_id: receipt.category_id || null,
+              source: receipt.source,
+            }));
+            
+            typedTransactions.push(...receiptTransactions);
           }
         }
       }
@@ -402,7 +427,11 @@ const Recebimentos = () => {
           status: item.status,
           client_id: item.client_id || undefined,
           client_name: client ? client.name : undefined,
-          source: item.source || 'transaction'
+          source: item.source || 'transaction',
+          type: item.type,
+          user_id: item.user_id,
+          created_at: item.created_at,
+          updated_at: item.updated_at
         };
       });
       
@@ -420,7 +449,11 @@ const Recebimentos = () => {
           status: 'completed', // All included payments are completed
           client_id: payment.client_id || undefined,
           client_name: client ? client.name : payment.recipient,
-          source: 'payment'
+          source: 'payment',
+          type: 'income',
+          user_id: payment.user_id,
+          created_at: payment.created_at,
+          updated_at: payment.updated_at
         };
       });
       
