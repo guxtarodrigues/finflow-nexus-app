@@ -69,6 +69,21 @@ interface Client {
   name: string;
 }
 
+interface Transaction {
+  id: string;
+  date: string;
+  description: string;
+  category: string;
+  category_id: string | null;
+  client_id: string | null;
+  value: number;
+  status: string;
+  type: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
 const Recebimentos = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -224,26 +239,30 @@ const Recebimentos = () => {
       
       const clientsMap = new Map<string, { id: string, name: string }>();
       
-      const transactionsWithClientId = transactionsData.filter(tx => tx.client_id);
+      const typedTransactions = transactionsData as Transaction[];
+      
+      const transactionsWithClientId = typedTransactions.filter(tx => tx.client_id);
       
       if (transactionsWithClientId.length > 0) {
-        const clientIds = [...new Set(transactionsWithClientId.map(tx => tx.client_id))];
+        const clientIds = [...new Set(transactionsWithClientId.map(tx => tx.client_id))].filter(Boolean) as string[];
         
-        const { data: clientsData, error: clientsError } = await supabase
-          .from('clients')
-          .select('id, name')
-          .in('id', clientIds);
-        
-        if (clientsError) throw clientsError;
-        
-        if (clientsData) {
-          clientsData.forEach(client => {
-            clientsMap.set(client.id, { id: client.id, name: client.name });
-          });
+        if (clientIds.length > 0) {
+          const { data: clientsData, error: clientsError } = await supabase
+            .from('clients')
+            .select('id, name')
+            .in('id', clientIds);
+          
+          if (clientsError) throw clientsError;
+          
+          if (clientsData) {
+            clientsData.forEach(client => {
+              clientsMap.set(client.id, { id: client.id, name: client.name });
+            });
+          }
         }
       }
       
-      const formattedReceipts = transactionsData.map((item) => {
+      const formattedReceipts = typedTransactions.map((item) => {
         const client = item.client_id ? clientsMap.get(item.client_id) : null;
         
         return {
@@ -251,11 +270,11 @@ const Recebimentos = () => {
           date: format(new Date(item.date), 'dd/MM/yyyy'),
           description: item.description,
           category: item.category,
-          category_id: item.category_id,
+          category_id: item.category_id || '',
           value: Number(item.value),
           status: item.status,
-          client_id: item.client_id,
-          client_name: client ? client.name : null
+          client_id: item.client_id || undefined,
+          client_name: client ? client.name : undefined
         };
       });
       
