@@ -126,7 +126,9 @@ export const GoalsDashboard = () => {
                   <Progress 
                     value={goal.progress} 
                     className="h-2 bg-[#2A2A2E]" 
-                    indicatorClassName={`bg-[${goal.color}]`}
+                    style={{ 
+                      '--progress-color': goal.color 
+                    } as React.CSSProperties}
                   />
                 </div>
               ))}
