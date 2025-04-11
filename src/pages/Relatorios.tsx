@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { FileBarChart, FileText, Download, Filter, Table, FileSpreadsheet, Calendar, ArrowRight, Coins, TrendingUp, Settings, ChevronRight, RefreshCw, Loader2 } from 'lucide-react';
+import { FileBarChart, FileText, Download, Filter, Table, FileSpreadsheet, Calendar, ArrowRight, Coins, TrendingUp, Settings, ChevronRight, RefreshCw, Loader2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
