@@ -22,17 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-
-interface Transaction {
-  id: string;
-  date: string;
-  due_date: string;
-  description: string;
-  category: string;
-  type: string;
-  value: number;
-  status: string;
-}
+import { Transaction } from "@/types/transactions";
 
 interface TransactionListProps {
   transactions: Transaction[];

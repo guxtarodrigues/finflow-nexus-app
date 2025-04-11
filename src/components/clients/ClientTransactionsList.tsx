@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { 
   Table,
@@ -24,19 +23,7 @@ import {
 import { format, addMonths, parseISO } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-
-interface Transaction {
-  id: string;
-  date: string;
-  due_date: string;
-  description: string;
-  category: string;
-  type: string;
-  value: number;
-  status: string;
-  recurrence?: string | null;
-  recurrence_count?: number | null;
-}
+import { Transaction } from "@/types/transactions";
 
 interface ClientTransactionsListProps {
   clientId: string;
@@ -78,7 +65,8 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             value: Number(transaction.value),
             status: transaction.status,
             recurrence: transaction.recurrence,
-            recurrence_count: transaction.recurrence_count
+            recurrence_count: transaction.recurrence_count,
+            client_id: transaction.client_id
           });
           
           // Generate future recurrent transactions for UI display
@@ -125,7 +113,8 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
                     value: Number(transaction.value),
                     status: 'pending',
                     recurrence: transaction.recurrence,
-                    recurrence_count: i
+                    recurrence_count: i,
+                    client_id: transaction.client_id
                   });
                 }
               }
@@ -393,129 +382,4 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
       </AlertDialog>
     </>
   );
-  
-  // Helper functions that were not shown in the original code
-  function getStatusBadgeClass(status: string) {
-    switch (status) {
-      case 'completed':
-        return 'bg-green-500/20 text-green-500';
-      case 'pending':
-        return 'bg-yellow-500/20 text-yellow-500';
-      default:
-        return 'bg-gray-500/20 text-gray-500';
-    }
-  }
-  
-  function getStatusText(status: string) {
-    switch (status) {
-      case 'completed':
-        return 'Recebido';
-      case 'pending':
-        return 'Pendente';
-      default:
-        return status;
-    }
-  }
-  
-  function handleMarkAsReceived(id: string) {
-    try {
-      if (id.includes('recurrence')) {
-        toast({
-          title: "Operação não permitida",
-          description: "Não é possível marcar como recebido um pagamento recorrente futuro.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      setProcessingId(id);
-      
-      // Call API to update transaction status
-      supabase
-        .from('transactions')
-        .update({ status: 'completed' })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) throw error;
-          
-          toast({
-            title: "Recebimento confirmado",
-            description: "O recebimento foi marcado como recebido com sucesso",
-          });
-          
-          fetchTransactions();
-        })
-        .catch((error) => {
-          console.error('Error marking as received:', error);
-          toast({
-            title: "Erro ao confirmar recebimento",
-            description: error.message,
-            variant: "destructive"
-          });
-        })
-        .finally(() => {
-          setProcessingId(null);
-        });
-    } catch (error: any) {
-      console.error('Error in handleMarkAsReceived:', error);
-      setProcessingId(null);
-    }
-  }
-  
-  function deleteTransaction(id: string) {
-    try {
-      if (id.includes('recurrence')) {
-        toast({
-          title: "Operação não permitida",
-          description: "Não é possível excluir um pagamento recorrente futuro desta forma.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      setProcessingId(id);
-      
-      supabase
-        .from('transactions')
-        .delete()
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) throw error;
-          
-          toast({
-            title: "Transação excluída",
-            description: "A transação foi excluída com sucesso",
-          });
-          
-          fetchTransactions();
-        })
-        .catch((error) => {
-          console.error('Error deleting transaction:', error);
-          toast({
-            title: "Erro ao excluir transação",
-            description: error.message,
-            variant: "destructive"
-          });
-        })
-        .finally(() => {
-          setProcessingId(null);
-        });
-    } catch (error: any) {
-      console.error('Error in deleteTransaction:', error);
-      setProcessingId(null);
-    }
-  }
-  
-  function handleDeleteClick(id: string) {
-    setTransactionToDelete(id);
-    setDeleteConfirmOpen(true);
-  }
-  
-  function handleConfirmDelete() {
-    if (transactionToDelete) {
-      deleteTransaction(transactionToDelete);
-      setTransactionToDelete(null);
-      setDeleteConfirmOpen(false);
-    }
-  }
 };
