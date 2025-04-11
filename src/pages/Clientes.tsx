@@ -893,3 +893,137 @@ const Clientes = () => {
                             mode="single"
                             selected={selectedClient.contract_start ? new Date(selectedClient.contract_start) : undefined}
                             onSelect={(date) => setSelectedClient({...selectedClient, contract_start: date ? date.toISOString() : null})}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-contract_end">Fim do Contrato</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal"
+                          >
+                            <Calendar className="mr-2 h-4 w-4" />
+                            {selectedClient.contract_end ? (
+                              format(new Date(selectedClient.contract_end), 'dd/MM/yyyy')
+                            ) : (
+                              <span className="text-muted-foreground">Selecione uma data</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <CalendarComponent
+                            mode="single"
+                            selected={selectedClient.contract_end ? new Date(selectedClient.contract_end) : undefined}
+                            onSelect={(date) => setSelectedClient({...selectedClient, contract_end: date ? date.toISOString() : null})}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-monthly_value">Valor Mensal</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5">R$</span>
+                        <Input
+                          id="edit-monthly_value"
+                          type="number"
+                          className="pl-9"
+                          value={selectedClient.monthly_value || ""}
+                          onChange={(e) => setSelectedClient({...selectedClient, monthly_value: parseFloat(e.target.value) || 0})}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-status">Status</Label>
+                      <Select
+                        value={selectedClient.status}
+                        onValueChange={(value: 'active' | 'inactive') => setSelectedClient({...selectedClient, status: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Ativo</SelectItem>
+                          <SelectItem value="inactive">Inativo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2 pt-4">
+                    <Switch
+                      id="edit-recurring_payment"
+                      checked={selectedClient.recurring_payment}
+                      onCheckedChange={(checked) => setSelectedClient({...selectedClient, recurring_payment: checked})}
+                    />
+                    <Label htmlFor="edit-recurring_payment">Pagamento Recorrente</Label>
+                  </div>
+                  
+                  <div className="grid gap-2 pt-4">
+                    <Label htmlFor="edit-description">Descrição</Label>
+                    <Textarea
+                      id="edit-description"
+                      className="min-h-[100px]"
+                      placeholder="Detalhes adicionais sobre o cliente ou contrato"
+                      value={selectedClient.description || ""}
+                      onChange={(e) => setSelectedClient({...selectedClient, description: e.target.value || null})}
+                    />
+                  </div>
+                  
+                  <div className="flex justify-between items-center pt-6">
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => setDeleteConfirmOpen(true)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Excluir
+                    </Button>
+                    
+                    <Button onClick={handleUpdateClient} className="bg-fin-green text-black hover:bg-fin-green/90">
+                      Salvar Alterações
+                    </Button>
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="transactions" className="mt-4">
+                  {selectedClient && (
+                    <ClientTransactionsList clientId={selectedClient.id} />
+                  )}
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+      
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. Isso excluirá permanentemente o cliente e todos os seus dados relacionados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedClient && handleDeleteClient(selectedClient.id)}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+export default Clientes;
