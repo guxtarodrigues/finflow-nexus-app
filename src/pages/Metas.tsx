@@ -1,15 +1,13 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Target, Plus, TrendingUp, Trash2, Edit, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Target, Plus, TrendingUp, Trash2, Edit, AlertTriangle, RefreshCw, CheckCircle2, CircleDollarSign, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { GoalsDashboard } from '@/components/goals/GoalsDashboard';
 import { GoalForm } from '@/components/goals/GoalForm';
 import { UpdateProgressDialog } from '@/components/goals/UpdateProgressDialog';
 import { useGoalService, Goal } from '@/services/goalService';
 import { format } from 'date-fns';
-import { pt } from 'date-fns/locale';
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -22,9 +20,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { MetricCard } from '@/components/dashboard/MetricCard';
 
 const Metas = () => {
-  const [activeTab, setActiveTab] = useState("dashboard");
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,6 +138,28 @@ const Metas = () => {
     setIsUpdateProgressOpen(true);
   };
 
+  // Calculate metrics for mini dashboard
+  const calculateMetrics = () => {
+    if (goals.length === 0) return {
+      totalGoals: 0,
+      completedGoals: 0,
+      totalAmount: 0,
+      overallProgress: 0
+    };
+
+    const totalGoals = goals.length;
+    const completedGoals = goals.filter(goal => 
+      goal.current_amount >= goal.target_amount
+    ).length;
+    const totalAmount = goals.reduce((sum, goal) => sum + goal.target_amount, 0);
+    const currentAmount = goals.reduce((sum, goal) => sum + goal.current_amount, 0);
+    const overallProgress = totalAmount > 0 ? Math.round((currentAmount / totalAmount) * 100) : 0;
+
+    return { totalGoals, completedGoals, totalAmount, overallProgress };
+  };
+
+  const { totalGoals, completedGoals, totalAmount, overallProgress } = calculateMetrics();
+
   if (error && user) {
     return (
       <div className="space-y-6">
@@ -181,152 +201,168 @@ const Metas = () => {
         </Button>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="bg-[#2A2A2E] text-white">
-          <TabsTrigger value="dashboard" className="data-[state=active]:bg-fin-green data-[state=active]:text-black">
-            Dashboard
-          </TabsTrigger>
-          <TabsTrigger value="list" className="data-[state=active]:bg-fin-green data-[state=active]:text-black">
-            Lista de Metas
-          </TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="dashboard" className="space-y-4">
-          <GoalsDashboard />
-        </TabsContent>
-        
-        <TabsContent value="list">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {loading ? (
-              [...Array(3)].map((_, i) => (
-                <Card key={i} className="bg-[#1F1F23] border-[#2A2A2E] text-white shadow">
-                  <CardHeader className="pb-2 animate-pulse">
-                    <div className="h-6 w-3/4 bg-[#2A2A2E] rounded mb-1"></div>
-                    <div className="h-4 w-1/2 bg-[#2A2A2E] rounded"></div>
+      {/* Mini Dashboard */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <MetricCard
+          title="Total de Metas"
+          value={totalGoals.toString()}
+          subtitle="Metas cadastradas"
+          icon="money"
+        />
+        <MetricCard
+          title="Metas Completas"
+          value={completedGoals.toString()}
+          subtitle={`${completedGoals > 0 && totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0}% do total`}
+          trend={completedGoals > 0 ? "up" : "neutral"}
+          icon="income"
+        />
+        <MetricCard
+          title="Valor Total"
+          value={`R$ ${totalAmount.toLocaleString('pt-BR')}`}
+          subtitle="Soma de todas as metas"
+          icon="savings"
+        />
+        <MetricCard
+          title="Progresso Geral"
+          value={`${overallProgress}%`}
+          subtitle="Média de todas as metas"
+          trend={overallProgress > 50 ? "up" : "neutral"}
+          icon="income"
+        />
+      </div>
+
+      {/* Goals List */}
+      <div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {loading ? (
+            [...Array(3)].map((_, i) => (
+              <Card key={i} className="bg-[#1F1F23] border-[#2A2A2E] text-white shadow">
+                <CardHeader className="pb-2 animate-pulse">
+                  <div className="h-6 w-3/4 bg-[#2A2A2E] rounded mb-1"></div>
+                  <div className="h-4 w-1/2 bg-[#2A2A2E] rounded"></div>
+                </CardHeader>
+                <CardContent className="animate-pulse">
+                  <div className="space-y-4">
+                    <div className="flex justify-between">
+                      <div className="h-4 w-1/3 bg-[#2A2A2E] rounded"></div>
+                      <div className="h-4 w-1/3 bg-[#2A2A2E] rounded"></div>
+                    </div>
+                    <div className="h-2 bg-[#2A2A2E] rounded"></div>
+                    <div className="flex justify-between">
+                      <div className="h-4 w-2/5 bg-[#2A2A2E] rounded"></div>
+                      <div className="h-4 w-1/5 bg-[#2A2A2E] rounded"></div>
+                    </div>
+                    <div className="h-10 bg-[#2A2A2E] rounded"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          ) : goals.length > 0 ? (
+            goals.map((goal) => {
+              const progress = Math.min(100, Math.round((goal.current_amount / goal.target_amount) * 100));
+              return (
+                <Card key={goal.id} className="bg-[#1F1F23] border-[#2A2A2E] text-white shadow">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Target className="mr-2 h-6 w-6" style={{ color: goal.category_color }} />
+                        {goal.title}
+                      </div>
+                      <div className="flex space-x-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-[#94949F] hover:text-white hover:bg-[#2A2A2E]"
+                          onClick={() => openEditGoal(goal)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-[#94949F] hover:text-red-500 hover:bg-[#2A2A2E]"
+                          onClick={() => openDeleteGoal(goal)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardTitle>
+                    <CardDescription className="text-[#94949F]">
+                      {goal.description || goal.category}
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="animate-pulse">
+                  <CardContent>
                     <div className="space-y-4">
-                      <div className="flex justify-between">
-                        <div className="h-4 w-1/3 bg-[#2A2A2E] rounded"></div>
-                        <div className="h-4 w-1/3 bg-[#2A2A2E] rounded"></div>
+                      <div className="flex justify-between text-sm">
+                        <span>Meta: R$ {goal.target_amount.toLocaleString('pt-BR')}</span>
+                        {goal.deadline && (
+                          <span>Prazo: {format(new Date(goal.deadline), 'dd/MM/yyyy')}</span>
+                        )}
                       </div>
-                      <div className="h-2 bg-[#2A2A2E] rounded"></div>
-                      <div className="flex justify-between">
-                        <div className="h-4 w-2/5 bg-[#2A2A2E] rounded"></div>
-                        <div className="h-4 w-1/5 bg-[#2A2A2E] rounded"></div>
+                      <Progress 
+                        value={progress} 
+                        className="h-2 bg-[#2A2A2E]"
+                        style={{ 
+                          '--progress-color': goal.category_color 
+                        } as React.CSSProperties}
+                      />
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm">
+                          R$ {goal.current_amount.toLocaleString('pt-BR')} de R$ {goal.target_amount.toLocaleString('pt-BR')}
+                        </span>
+                        <span className="text-fin-green font-medium">
+                          {progress}%
+                        </span>
                       </div>
-                      <div className="h-10 bg-[#2A2A2E] rounded"></div>
+                      <Button 
+                        variant="outline" 
+                        className="w-full border-fin-green text-fin-green hover:bg-fin-green/10"
+                        onClick={() => openUpdateProgress(goal)}
+                      >
+                        <TrendingUp className="mr-2 h-4 w-4" />
+                        Atualizar Progresso
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
-              ))
-            ) : goals.length > 0 ? (
-              goals.map((goal) => {
-                const progress = Math.min(100, Math.round((goal.current_amount / goal.target_amount) * 100));
-                return (
-                  <Card key={goal.id} className="bg-[#1F1F23] border-[#2A2A2E] text-white shadow">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-lg flex items-center justify-between">
-                        <div className="flex items-center">
-                          <Target className="mr-2 h-6 w-6" style={{ color: goal.category_color }} />
-                          {goal.title}
-                        </div>
-                        <div className="flex space-x-1">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-[#94949F] hover:text-white hover:bg-[#2A2A2E]"
-                            onClick={() => openEditGoal(goal)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-[#94949F] hover:text-red-500 hover:bg-[#2A2A2E]"
-                            onClick={() => openDeleteGoal(goal)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </CardTitle>
-                      <CardDescription className="text-[#94949F]">
-                        {goal.description || goal.category}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex justify-between text-sm">
-                          <span>Meta: R$ {goal.target_amount.toLocaleString('pt-BR')}</span>
-                          {goal.deadline && (
-                            <span>Prazo: {format(new Date(goal.deadline), 'dd/MM/yyyy')}</span>
-                          )}
-                        </div>
-                        <Progress 
-                          value={progress} 
-                          className="h-2 bg-[#2A2A2E]"
-                          style={{ 
-                            '--progress-color': goal.category_color 
-                          } as React.CSSProperties}
-                        />
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm">
-                            R$ {goal.current_amount.toLocaleString('pt-BR')} de R$ {goal.target_amount.toLocaleString('pt-BR')}
-                          </span>
-                          <span className="text-fin-green font-medium">
-                            {progress}%
-                          </span>
-                        </div>
-                        <Button 
-                          variant="outline" 
-                          className="w-full border-fin-green text-fin-green hover:bg-fin-green/10"
-                          onClick={() => openUpdateProgress(goal)}
-                        >
-                          <TrendingUp className="mr-2 h-4 w-4" />
-                          Atualizar Progresso
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            ) : (
-              <Card className="bg-[#1F1F23] border-[#2A2A2E] text-white shadow col-span-3">
-                <CardContent className="p-6 flex flex-col items-center space-y-4">
-                  <Target className="h-12 w-12 text-[#2A2A2E] mb-2" />
-                  <h2 className="text-xl font-semibold">Nenhuma meta cadastrada</h2>
-                  <p className="text-center text-[#94949F]">
-                    Você ainda não possui metas financeiras cadastradas. Clique em "Nova Meta" para começar!
-                  </p>
-                  <Button 
-                    variant="outline" 
-                    className="border-fin-green text-fin-green hover:bg-fin-green/10 mt-2"
-                    onClick={() => setIsAddGoalOpen(true)}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Nova Meta
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {goals.length > 0 && (
-              <Card className="bg-[#1F1F23] border-[#2A2A2E] border-dashed text-white shadow flex flex-col items-center justify-center p-6 h-[245px]">
-                <Plus className="h-12 w-12 text-[#2A2A2E] mb-2" />
-                <p className="text-[#94949F] mb-4 text-center">Adicione uma nova meta financeira</p>
+              );
+            })
+          ) : (
+            <Card className="bg-[#1F1F23] border-[#2A2A2E] text-white shadow col-span-3">
+              <CardContent className="p-6 flex flex-col items-center space-y-4">
+                <Target className="h-12 w-12 text-[#2A2A2E] mb-2" />
+                <h2 className="text-xl font-semibold">Nenhuma meta cadastrada</h2>
+                <p className="text-center text-[#94949F]">
+                  Você ainda não possui metas financeiras cadastradas. Clique em "Nova Meta" para começar!
+                </p>
                 <Button 
                   variant="outline" 
-                  className="border-fin-green text-fin-green hover:bg-fin-green/10"
+                  className="border-fin-green text-fin-green hover:bg-fin-green/10 mt-2"
                   onClick={() => setIsAddGoalOpen(true)}
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Nova Meta
                 </Button>
-              </Card>
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
+              </CardContent>
+            </Card>
+          )}
+
+          {goals.length > 0 && (
+            <Card className="bg-[#1F1F23] border-[#2A2A2E] border-dashed text-white shadow flex flex-col items-center justify-center p-6 h-[245px]">
+              <Plus className="h-12 w-12 text-[#2A2A2E] mb-2" />
+              <p className="text-[#94949F] mb-4 text-center">Adicione uma nova meta financeira</p>
+              <Button 
+                variant="outline" 
+                className="border-fin-green text-fin-green hover:bg-fin-green/10"
+                onClick={() => setIsAddGoalOpen(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Nova Meta
+              </Button>
+            </Card>
+          )}
+        </div>
+      </div>
 
       {/* Create Goal Dialog */}
       <GoalForm
