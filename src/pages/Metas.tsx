@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Target, Plus, TrendingUp, Trash2, Edit, AlertTriangle } from 'lucide-react';
@@ -28,6 +27,7 @@ const Metas = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isAddGoalOpen, setIsAddGoalOpen] = useState(false);
   const [isEditGoalOpen, setIsEditGoalOpen] = useState(false);
   const [isDeleteGoalOpen, setIsDeleteGoalOpen] = useState(false);
@@ -44,11 +44,20 @@ const Metas = () => {
 
   const loadGoals = async () => {
     setLoading(true);
+    setError(null);
     try {
+      console.log('Fetching goals in Metas page...');
       const data = await fetchGoals();
+      console.log('Fetched goals data in Metas page:', data);
       setGoals(data);
-    } catch (error) {
-      console.error('Error loading goals:', error);
+    } catch (err: any) {
+      console.error('Error loading goals:', err);
+      setError('Não foi possível carregar as metas. Tente novamente mais tarde.');
+      toast({
+        title: "Erro ao carregar metas",
+        description: err.message || 'Não foi possível carregar as metas',
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -119,8 +128,7 @@ const Metas = () => {
     setIsUpdateProgressOpen(true);
   };
 
-  // Display login message if not authenticated
-  if (!user) {
+  if (error && user) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -130,10 +138,17 @@ const Metas = () => {
         <Card className="bg-[#1F1F23] border-[#2A2A2E] text-white shadow">
           <CardContent className="p-6 flex flex-col items-center space-y-4">
             <AlertTriangle className="h-12 w-12 text-yellow-400" />
-            <h2 className="text-xl font-semibold">Autenticação Necessária</h2>
+            <h2 className="text-xl font-semibold">Erro ao carregar dados</h2>
             <p className="text-center text-[#94949F]">
-              Você precisa estar logado para visualizar e gerenciar suas metas financeiras.
+              {error}
             </p>
+            <Button 
+              variant="outline" 
+              className="mt-4 border-fin-green text-fin-green hover:bg-fin-green/10"
+              onClick={() => loadGoals()}
+            >
+              Tentar novamente
+            </Button>
           </CardContent>
         </Card>
       </div>

@@ -1,9 +1,8 @@
-
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from '@/components/ui/progress';
 import { ForecastMetricCard } from "@/components/forecasting/ForecastMetricCard";
-import { Target, TrendingUp, CircleDollarSign, Users } from 'lucide-react';
+import { Target, TrendingUp, CircleDollarSign, AlertTriangle } from 'lucide-react';
 import { RadialBar, ResponsiveContainer, RadialBarChart, Legend, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { useGoalService, Goal } from '@/services/goalService';
 import { format } from 'date-fns';
@@ -19,15 +18,20 @@ export const GoalsDashboard = () => {
   const { fetchGoals } = useGoalService();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadGoals = async () => {
       setLoading(true);
+      setError(null);
       try {
+        console.log('Fetching goals data...');
         const data = await fetchGoals();
+        console.log('Fetched goals data:', data);
         setGoals(data);
-      } catch (error) {
-        console.error('Error loading goals:', error);
+      } catch (err) {
+        console.error('Error loading goals:', err);
+        setError('Não foi possível carregar as metas. Tente novamente mais tarde.');
       } finally {
         setLoading(false);
       }
@@ -36,7 +40,6 @@ export const GoalsDashboard = () => {
     loadGoals();
   }, [fetchGoals]);
 
-  // Calculate dashboard metrics
   const calculateMetrics = () => {
     if (goals.length === 0) return {
       overallProgress: 0,
@@ -53,7 +56,6 @@ export const GoalsDashboard = () => {
     ).length;
     const inProgressGoals = totalGoals - completedGoals;
 
-    // Calculate overall progress as average of all goals' progress
     const overallProgress = Math.round(
       goals.reduce((sum, goal) => {
         const goalProgress = Math.min(100, (goal.current_amount / goal.target_amount) * 100);
@@ -61,7 +63,6 @@ export const GoalsDashboard = () => {
       }, 0) / (totalGoals || 1)
     );
 
-    // Calculate category distribution
     const categoryTotals: Record<string, { total: number, color: string }> = {};
     
     goals.forEach(goal => {
@@ -79,7 +80,6 @@ export const GoalsDashboard = () => {
       color: categoryTotals[category].color
     }));
 
-    // Format goals progress data
     const goalsProgress = goals.map(goal => ({
       name: goal.title,
       progress: Math.min(100, Math.round((goal.current_amount / goal.target_amount) * 100)),
@@ -105,7 +105,28 @@ export const GoalsDashboard = () => {
     goalsProgress
   } = calculateMetrics();
 
-  // Placeholder for loading state
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <Card className="bg-[#1F1F23] border-[#2A2A2E] text-white shadow">
+          <CardContent className="p-6 flex flex-col items-center space-y-4">
+            <AlertTriangle className="h-12 w-12 text-yellow-400" />
+            <h2 className="text-xl font-semibold">Erro ao carregar dados</h2>
+            <p className="text-center text-[#94949F]">
+              {error}
+            </p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="mt-4 px-4 py-2 bg-fin-green text-black rounded-md hover:bg-fin-green/90"
+            >
+              Tentar novamente
+            </button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">

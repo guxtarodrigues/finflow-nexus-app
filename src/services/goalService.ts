@@ -23,6 +23,25 @@ export const useGoalService = () => {
 
   const fetchGoals = async (): Promise<Goal[]> => {
     try {
+      // Check connection to Supabase first
+      const { error: connectionError } = await supabase.from('goals').select('count').limit(1).single();
+      
+      if (connectionError && connectionError.code === 'PGRST116') {
+        // This is a foreign key violation which may happen when count() is used without an authenticated user
+        // It indicates the connection is working but the user isn't authenticated
+        console.warn('Auth required but connection is working');
+      } else if (connectionError && !['PGRST116'].includes(connectionError.code)) {
+        // This indicates a real connection issue
+        console.error('Connection error:', connectionError);
+        toast({
+          title: "Erro de conexão",
+          description: "Não foi possível conectar ao servidor. Verifique sua conexão de internet.",
+          variant: "destructive",
+        });
+        return [];
+      }
+
+      // Proceed with actual query
       const { data, error } = await supabase
         .from('goals')
         .select('*')
@@ -43,7 +62,7 @@ export const useGoalService = () => {
       console.error('Error in fetchGoals:', error);
       toast({
         title: "Erro ao carregar metas",
-        description: error.message,
+        description: "Ocorreu um erro ao buscar suas metas. Tente novamente mais tarde.",
         variant: "destructive",
       });
       return [];
