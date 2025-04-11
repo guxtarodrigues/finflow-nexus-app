@@ -24,46 +24,51 @@ import Metas from "./pages/Metas";
 import Alertas from "./pages/Alertas";
 import Configuracoes from "./pages/Configuracoes";
 import Recebimentos from "./pages/Recebimentos";
+import { useState } from "react";
 
-const queryClient = new QueryClient();
+// Create the App component as a function component
+const App = () => {
+  // Create the queryClient inside the component
+  const [queryClient] = useState(() => new QueryClient());
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <AuthProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            
-            <Route element={<ProtectedRoute />}>
-              <Route element={<MainLayout><Outlet /></MainLayout>}>
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/movimentacoes" element={<Movimentacoes />} />
-                <Route path="/pagamentos" element={<Pagamentos />} />
-                <Route path="/categorias" element={<Categorias />} />
-                <Route path="/clientes" element={<Clientes />} />
-                <Route path="/investimentos" element={<Investimentos />} />
-                <Route path="/recebimentos" element={<Recebimentos />} />
-                
-                {/* New routes */}
-                <Route path="/analises" element={<Analises />} />
-                <Route path="/relatorios" element={<Relatorios />} />
-                <Route path="/previsoes" element={<Previsoes />} />
-                <Route path="/metas" element={<Metas />} />
-                <Route path="/alertas" element={<Alertas />} />
-                <Route path="/configuracoes" element={<Configuracoes />} />
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <AuthProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              
+              <Route element={<ProtectedRoute />}>
+                <Route element={<MainLayout><Outlet /></MainLayout>}>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/movimentacoes" element={<Movimentacoes />} />
+                  <Route path="/pagamentos" element={<Pagamentos />} />
+                  <Route path="/categorias" element={<Categorias />} />
+                  <Route path="/clientes" element={<Clientes />} />
+                  <Route path="/investimentos" element={<Investimentos />} />
+                  <Route path="/recebimentos" element={<Recebimentos />} />
+                  
+                  {/* New routes */}
+                  <Route path="/analises" element={<Analises />} />
+                  <Route path="/relatorios" element={<Relatorios />} />
+                  <Route path="/previsoes" element={<Previsoes />} />
+                  <Route path="/metas" element={<Metas />} />
+                  <Route path="/alertas" element={<Alertas />} />
+                  <Route path="/configuracoes" element={<Configuracoes />} />
+                </Route>
               </Route>
-            </Route>
-            
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+              
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
