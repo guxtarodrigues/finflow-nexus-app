@@ -73,6 +73,7 @@ import { MetricCard } from "@/components/dashboard/MetricCard";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 const Clientes = () => {
+  
   const [clients, setClients] = useState<Client[]>([]);
   const [paidClients, setPaidClients] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -892,4 +893,3 @@ const Clientes = () => {
                             mode="single"
                             selected={selectedClient.contract_start ? new Date(selectedClient.contract_start) : undefined}
                             onSelect={(date) => setSelectedClient({...selectedClient, contract_start: date ? date.toISOString() : null})}
-                            initialFocus
