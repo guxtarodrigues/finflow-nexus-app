@@ -58,49 +58,55 @@ export const TransactionList = ({
     return dateA.getTime() - dateB.getTime();
   });
 
-  const handleMarkAsReceived = async (id: string) => {
+  function handleMarkAsReceived(id: string) {
     try {
       setProcessingId(id);
       
-      const { error } = await supabase
+      supabase
         .from('transactions')
         .update({ status: 'completed' })
-        .eq('id', id);
-
-      if (error) throw error;
-      
-      if (onStatusChange) {
-        onStatusChange();
-      }
-      
-      toast({
-        title: "Recebimento confirmado",
-        description: "O recebimento foi marcado como recebido com sucesso",
-      });
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) throw error;
+          
+          if (onStatusChange) {
+            onStatusChange();
+          }
+          
+          toast({
+            title: "Recebimento confirmado",
+            description: "O recebimento foi marcado como recebido com sucesso",
+          });
+        })
+        .catch((error) => {
+          console.error('Error marking as received:', error);
+          toast({
+            title: "Erro ao confirmar recebimento",
+            description: error.message,
+            variant: "destructive"
+          });
+        })
+        .finally(() => {
+          setProcessingId(null);
+        });
     } catch (error: any) {
-      console.error('Error marking as received:', error);
-      toast({
-        title: "Erro ao confirmar recebimento",
-        description: error.message,
-        variant: "destructive"
-      });
-    } finally {
+      console.error('Error in handleMarkAsReceived:', error);
       setProcessingId(null);
     }
-  };
+  }
 
-  const handleConfirmDelete = () => {
+  function handleConfirmDelete() {
     if (transactionToDelete) {
       onDeleteTransaction(transactionToDelete);
       setTransactionToDelete(null);
       setDeleteConfirmOpen(false);
     }
-  };
+  }
 
-  const handleDeleteClick = (id: string) => {
+  function handleDeleteClick(id: string) {
     setTransactionToDelete(id);
     setDeleteConfirmOpen(true);
-  };
+  }
 
   return (
     <>
@@ -146,7 +152,7 @@ export const TransactionList = ({
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="font-medium">{transaction.due_date || transaction.date}</TableCell>
+                  <TableCell className="font-medium">{transaction.due_date}</TableCell>
                   <TableCell>{transaction.description}</TableCell>
                   <TableCell>
                     <Badge variant={transaction.type === "income" ? "success" : "destructive"} className="bg-opacity-20 text-xs">

@@ -59,7 +59,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
         .select('*')
         .eq('client_id', clientId)
         .eq('type', 'income')
-        .order('due_date', { ascending: true }); // Change order to due_date
+        .order('due_date', { ascending: true });
       
       if (error) throw error;
       
@@ -67,6 +67,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
         const processedTransactions: Transaction[] = [];
         
         originalTransactions.forEach(transaction => {
+          // Format the transaction with consistent dates
           processedTransactions.push({
             id: transaction.id,
             date: format(new Date(transaction.date), 'dd/MM/yyyy'),
@@ -80,6 +81,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             recurrence_count: transaction.recurrence_count
           });
           
+          // Generate future recurrent transactions for UI display
           if (transaction.recurrence && transaction.recurrence !== 'once') {
             const getMonthsToAdd = (recurrenceType: string) => {
               switch (recurrenceType) {
@@ -105,17 +107,18 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
             
             const monthsToAdd = getMonthsToAdd(transaction.recurrence);
             const occurrences = getOccurrences(transaction.recurrence);
-            const originalDate = new Date(transaction.date);
+            const dueDateBase = transaction.due_date ? new Date(transaction.due_date) : new Date(transaction.date);
             const currentDate = new Date();
             
             if (monthsToAdd > 0) {
               for (let i = 1; i <= occurrences; i++) {
-                const futureDate = addMonths(originalDate, monthsToAdd * i);
+                const futureDueDate = addMonths(dueDateBase, monthsToAdd * i);
                 
-                if (futureDate > currentDate) {
+                if (futureDueDate > currentDate) {
                   processedTransactions.push({
                     id: `${transaction.id}-recurrence-${i}`,
-                    date: format(futureDate, 'dd/MM/yyyy'),
+                    date: format(new Date(transaction.date), 'dd/MM/yyyy'),
+                    due_date: format(futureDueDate, 'dd/MM/yyyy'),
                     description: `${transaction.description} (Recorrente)`,
                     category: transaction.category,
                     type: transaction.type,
@@ -132,9 +135,9 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
         
         // Sort by due_date
         processedTransactions.sort((a, b) => {
-          const dateA = parseISO(a.due_date.split('/').reverse().join('-'));
-          const dateB = parseISO(b.due_date.split('/').reverse().join('-'));
-          return dateA.getTime() - dateB.getTime(); // Ascending by due date
+          const dateA = a.due_date ? parseISO(a.due_date.split('/').reverse().join('-')) : new Date();
+          const dateB = b.due_date ? parseISO(b.due_date.split('/').reverse().join('-')) : new Date();
+          return dateA.getTime() - dateB.getTime();
         });
         
         setTransactions(processedTransactions);
@@ -390,4 +393,129 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
       </AlertDialog>
     </>
   );
+  
+  // Helper functions that were not shown in the original code
+  function getStatusBadgeClass(status: string) {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-500/20 text-green-500';
+      case 'pending':
+        return 'bg-yellow-500/20 text-yellow-500';
+      default:
+        return 'bg-gray-500/20 text-gray-500';
+    }
+  }
+  
+  function getStatusText(status: string) {
+    switch (status) {
+      case 'completed':
+        return 'Recebido';
+      case 'pending':
+        return 'Pendente';
+      default:
+        return status;
+    }
+  }
+  
+  function handleMarkAsReceived(id: string) {
+    try {
+      if (id.includes('recurrence')) {
+        toast({
+          title: "Operação não permitida",
+          description: "Não é possível marcar como recebido um pagamento recorrente futuro.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      setProcessingId(id);
+      
+      // Call API to update transaction status
+      supabase
+        .from('transactions')
+        .update({ status: 'completed' })
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) throw error;
+          
+          toast({
+            title: "Recebimento confirmado",
+            description: "O recebimento foi marcado como recebido com sucesso",
+          });
+          
+          fetchTransactions();
+        })
+        .catch((error) => {
+          console.error('Error marking as received:', error);
+          toast({
+            title: "Erro ao confirmar recebimento",
+            description: error.message,
+            variant: "destructive"
+          });
+        })
+        .finally(() => {
+          setProcessingId(null);
+        });
+    } catch (error: any) {
+      console.error('Error in handleMarkAsReceived:', error);
+      setProcessingId(null);
+    }
+  }
+  
+  function deleteTransaction(id: string) {
+    try {
+      if (id.includes('recurrence')) {
+        toast({
+          title: "Operação não permitida",
+          description: "Não é possível excluir um pagamento recorrente futuro desta forma.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      setProcessingId(id);
+      
+      supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) throw error;
+          
+          toast({
+            title: "Transação excluída",
+            description: "A transação foi excluída com sucesso",
+          });
+          
+          fetchTransactions();
+        })
+        .catch((error) => {
+          console.error('Error deleting transaction:', error);
+          toast({
+            title: "Erro ao excluir transação",
+            description: error.message,
+            variant: "destructive"
+          });
+        })
+        .finally(() => {
+          setProcessingId(null);
+        });
+    } catch (error: any) {
+      console.error('Error in deleteTransaction:', error);
+      setProcessingId(null);
+    }
+  }
+  
+  function handleDeleteClick(id: string) {
+    setTransactionToDelete(id);
+    setDeleteConfirmOpen(true);
+  }
+  
+  function handleConfirmDelete() {
+    if (transactionToDelete) {
+      deleteTransaction(transactionToDelete);
+      setTransactionToDelete(null);
+      setDeleteConfirmOpen(false);
+    }
+  }
 };
