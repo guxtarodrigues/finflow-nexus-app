@@ -12,6 +12,7 @@ interface StatusData {
   name: string;
   value: number;
   color: string;
+  status: string; // Adding the missing status property to the interface
 }
 
 export const PaymentStatusChart = () => {
@@ -63,7 +64,7 @@ export const PaymentStatusChart = () => {
         const chartData = Array.from(statusMap.entries())
           .map(([status, value]) => ({
             name: statusLabels[status]?.label || status,
-            status,
+            status, // Include the status field in the chartData
             value,
             color: statusLabels[status]?.color || '#6b7280'
           }));
