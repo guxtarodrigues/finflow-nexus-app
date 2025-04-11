@@ -71,7 +71,7 @@ export const useAlertService = () => {
   const { toast } = useToast();
 
   const setupDefaultAlerts = async () => {
-    if (!user) return [];
+    if (!user) return;
 
     try {
       // Check if default alerts already exist
@@ -183,7 +183,6 @@ export const useAlertService = () => {
         .from('alerts')
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', id)
-        .eq('user_id', user.id)
         .select()
         .single();
 
@@ -205,8 +204,7 @@ export const useAlertService = () => {
       const { error } = await supabase
         .from('alerts')
         .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
+        .eq('id', id);
 
       if (error) {
         throw new Error(error.message);

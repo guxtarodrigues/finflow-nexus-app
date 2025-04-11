@@ -16,6 +16,7 @@ export type Database = {
           description: string
           due_date: string | null
           id: string
+          is_default: boolean | null
           read: boolean
           title: string
           type: string
@@ -28,6 +29,7 @@ export type Database = {
           description: string
           due_date?: string | null
           id?: string
+          is_default?: boolean | null
           read?: boolean
           title: string
           type: string
@@ -40,6 +42,7 @@ export type Database = {
           description?: string
           due_date?: string | null
           id?: string
+          is_default?: boolean | null
           read?: boolean
           title?: string
           type?: string

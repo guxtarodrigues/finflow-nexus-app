@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Alert, useAlertService } from "@/services/alertService";
 import { Bell, Check, AlertTriangle, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -22,9 +22,9 @@ export const NotificationDropdown = () => {
   const navigate = useNavigate();
 
   // Ensure default alerts are available
-  useState(() => {
+  useEffect(() => {
     setupDefaultAlerts();
-  });
+  }, []);
 
   const handleMarkAsRead = async (alertId: string, e: React.MouseEvent) => {
     e.stopPropagation();
