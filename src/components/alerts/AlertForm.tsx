@@ -1,6 +1,5 @@
-
 import { useState } from "react";
-import { createAlertInput, useAlertService } from "@/services/alertService";
+import { CreateAlertInput, useAlertService } from "@/services/alertService";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";

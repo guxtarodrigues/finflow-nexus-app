@@ -16,10 +16,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export const NotificationDropdown = () => {
-  const { useUnreadAlerts, useMarkAlertAsRead } = useAlertService();
+  const { useUnreadAlerts, useMarkAlertAsRead, setupDefaultAlerts } = useAlertService();
   const { data: unreadAlerts = [], isLoading } = useUnreadAlerts();
   const markAsRead = useMarkAlertAsRead();
   const navigate = useNavigate();
+
+  // Ensure default alerts are available
+  useState(() => {
+    setupDefaultAlerts();
+  });
 
   const handleMarkAsRead = async (alertId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -55,17 +60,20 @@ export const NotificationDropdown = () => {
     navigate("/alertas");
   };
 
+  // Filter to show only active alerts in the dropdown
+  const activeUnreadAlerts = unreadAlerts.filter(alert => alert.active);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button size="icon" variant="ghost" className="relative">
           <Bell className="h-5 w-5" />
-          {unreadAlerts.length > 0 && (
+          {activeUnreadAlerts.length > 0 && (
             <Badge
               className="absolute -top-1 -right-1 px-1.5 py-0.5 min-w-[18px] h-[18px] flex items-center justify-center bg-fin-green text-black text-xs"
               variant="outline"
             >
-              {unreadAlerts.length}
+              {activeUnreadAlerts.length}
             </Badge>
           )}
         </Button>
@@ -76,11 +84,11 @@ export const NotificationDropdown = () => {
         
         {isLoading ? (
           <div className="p-4 text-center text-[#94949F]">Carregando...</div>
-        ) : unreadAlerts.length === 0 ? (
+        ) : activeUnreadAlerts.length === 0 ? (
           <div className="p-4 text-center text-[#94949F]">Não há notificações não lidas</div>
         ) : (
           <div className="max-h-[300px] overflow-y-auto">
-            {unreadAlerts.map((alert) => (
+            {activeUnreadAlerts.map((alert) => (
               <DropdownMenuItem 
                 key={alert.id} 
                 className="p-2 cursor-pointer flex justify-between group"
