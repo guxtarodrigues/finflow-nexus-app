@@ -1,4 +1,3 @@
-
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
@@ -9,14 +8,12 @@ import {
   TrendingUp,
   PieChart,
   FileText,
-  CalendarCheck,
   Settings,
   CircleDollarSign,
   Clock,
   Database as CategoryIcon,
   BarChart,
   FileBarChart,
-  CalendarClock,
   Target,
   Bell,
   ChevronRight,
@@ -89,12 +86,6 @@ export const Sidebar = () => {
       name: "Previsões",
       path: "/previsoes",
       icon: <TrendingUp size={20} />,
-      expanded: false,
-    },
-    {
-      name: "Calendário",
-      path: "/calendario",
-      icon: <CalendarCheck size={20} />,
       expanded: false,
     },
     {

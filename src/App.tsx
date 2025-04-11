@@ -20,7 +20,6 @@ import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import Analises from "./pages/Analises";
 import Relatorios from "./pages/Relatorios";
 import Previsoes from "./pages/Previsoes";
-import Calendario from "./pages/Calendario";
 import Metas from "./pages/Metas";
 import Alertas from "./pages/Alertas";
 import Configuracoes from "./pages/Configuracoes";
@@ -53,7 +52,6 @@ const App = () => (
                 <Route path="/analises" element={<Analises />} />
                 <Route path="/relatorios" element={<Relatorios />} />
                 <Route path="/previsoes" element={<Previsoes />} />
-                <Route path="/calendario" element={<Calendario />} />
                 <Route path="/metas" element={<Metas />} />
                 <Route path="/alertas" element={<Alertas />} />
                 <Route path="/configuracoes" element={<Configuracoes />} />
