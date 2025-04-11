@@ -7,6 +7,7 @@ import { Target, TrendingUp, CircleDollarSign, AlertTriangle, RefreshCw } from '
 import { PieChart, Pie, ResponsiveContainer, Cell, Tooltip } from 'recharts';
 import { useGoalService, Goal } from '@/services/goalService';
 import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface CategoryDistribution {
   name: string;
@@ -26,12 +27,18 @@ export const GoalsDashboard = () => {
       setLoading(true);
       setError(null);
       try {
-        console.log('Fetching goals data...');
+        console.log('Fetching goals data in GoalsDashboard...');
         const data = await fetchGoals();
-        console.log('Fetched goals data:', data);
-        setGoals(data || []);
+        console.log('Fetched goals data in GoalsDashboard:', data);
+        
+        if (Array.isArray(data)) {
+          setGoals(data);
+        } else {
+          console.error('Unexpected data format:', data);
+          setGoals([]);
+        }
       } catch (err: any) {
-        console.error('Error loading goals:', err);
+        console.error('Error loading goals in GoalsDashboard:', err);
         setError('Não foi possível carregar as metas. Tente novamente mais tarde.');
       } finally {
         setLoading(false);
@@ -109,6 +116,44 @@ export const GoalsDashboard = () => {
     categoryDistribution,
     goalsProgress
   } = calculateMetrics();
+
+  // Debug table - will display raw goals data for debugging
+  const RawDataTable = ({ goals }: { goals: Goal[] }) => {
+    return (
+      <Card className="bg-[#1F1F23] border-[#2A2A2E] text-white shadow mt-6">
+        <CardHeader>
+          <CardTitle className="text-lg">Debug: Raw Goals Data</CardTitle>
+          <CardDescription className="text-[#94949F]">
+            Displays the raw data from the database for troubleshooting
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Current</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {goals.map(goal => (
+                <TableRow key={goal.id}>
+                  <TableCell className="text-xs">{goal.id?.substring(0, 8)}...</TableCell>
+                  <TableCell>{goal.title}</TableCell>
+                  <TableCell>{goal.category}</TableCell>
+                  <TableCell>{goal.target_amount}</TableCell>
+                  <TableCell>{goal.current_amount}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    );
+  };
 
   if (error) {
     return (
@@ -295,6 +340,9 @@ export const GoalsDashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Debug table - only shown during development for troubleshooting */}
+      <RawDataTable goals={goals} />
     </div>
   );
 };

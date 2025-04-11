@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -26,22 +25,9 @@ export const useGoalService = () => {
       // Check if user is authenticated
       if (!user) {
         console.warn('User not authenticated, cannot fetch goals');
-        return [];
-      }
-
-      // Check connection to Supabase first
-      const { error: connectionError } = await supabase.from('goals').select('count').limit(1).single();
-      
-      if (connectionError && connectionError.code === 'PGRST116') {
-        // This is a foreign key violation which may happen when count() is used without an authenticated user
-        // It indicates the connection is working but the user isn't authenticated
-        console.warn('Auth required but connection is working');
-      } else if (connectionError && !['PGRST116'].includes(connectionError.code)) {
-        // This indicates a real connection issue
-        console.error('Connection error:', connectionError);
         toast({
-          title: "Erro de conexão",
-          description: "Não foi possível conectar ao servidor. Verifique sua conexão de internet.",
+          title: "Usuário não autenticado",
+          description: "Você precisa estar logado para ver suas metas.",
           variant: "destructive",
         });
         return [];
@@ -64,6 +50,7 @@ export const useGoalService = () => {
         return [];
       }
 
+      console.log('Successfully fetched goals:', data);
       return data || [];
     } catch (error: any) {
       console.error('Error in fetchGoals:', error);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Target, Plus, TrendingUp, Trash2, Edit, AlertTriangle } from 'lucide-react';
+import { Target, Plus, TrendingUp, Trash2, Edit, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,6 +33,7 @@ const Metas = () => {
   const [isDeleteGoalOpen, setIsDeleteGoalOpen] = useState(false);
   const [isUpdateProgressOpen, setIsUpdateProgressOpen] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   
   const { fetchGoals, createGoal, updateGoal, deleteGoal, updateGoalProgress } = useGoalService();
   const { user } = useAuth();
@@ -40,7 +41,7 @@ const Metas = () => {
 
   useEffect(() => {
     loadGoals();
-  }, []);
+  }, [retryCount]);
 
   const loadGoals = async () => {
     setLoading(true);
@@ -49,7 +50,14 @@ const Metas = () => {
       console.log('Fetching goals in Metas page...');
       const data = await fetchGoals();
       console.log('Fetched goals data in Metas page:', data);
-      setGoals(data);
+      
+      if (Array.isArray(data)) {
+        setGoals(data);
+      } else {
+        console.error('Unexpected data format in Metas page:', data);
+        setGoals([]);
+        setError('Formato de dados inválido. Tente novamente mais tarde.');
+      }
     } catch (err: any) {
       console.error('Error loading goals:', err);
       setError('Não foi possível carregar as metas. Tente novamente mais tarde.');
@@ -61,6 +69,10 @@ const Metas = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRetry = () => {
+    setRetryCount(prev => prev + 1);
   };
 
   const handleCreateGoal = async (formData: Omit<Goal, 'id' | 'user_id'>) => {
@@ -143,10 +155,11 @@ const Metas = () => {
               {error}
             </p>
             <Button 
-              variant="outline" 
-              className="mt-4 border-fin-green text-fin-green hover:bg-fin-green/10"
-              onClick={() => loadGoals()}
+              onClick={handleRetry}
+              className="mt-4 flex items-center gap-2 border-fin-green text-fin-green hover:bg-fin-green/10"
+              variant="outline"
             >
+              <RefreshCw className="h-4 w-4" />
               Tentar novamente
             </Button>
           </CardContent>
@@ -185,7 +198,6 @@ const Metas = () => {
         <TabsContent value="list">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {loading ? (
-              // Loading skeletons
               [...Array(3)].map((_, i) => (
                 <Card key={i} className="bg-[#1F1F23] border-[#2A2A2E] text-white shadow">
                   <CardHeader className="pb-2 animate-pulse">
