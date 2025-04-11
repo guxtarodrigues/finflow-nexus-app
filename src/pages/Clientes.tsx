@@ -893,3 +893,44 @@ const Clientes = () => {
                             mode="single"
                             selected={selectedClient.contract_start ? new Date(selectedClient.contract_start) : undefined}
                             onSelect={(date) => setSelectedClient({...selectedClient, contract_start: date ? date.toISOString() : null})}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-contract_end">Fim do Contrato</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal"
+                          >
+                            <Calendar className="mr-2 h-4 w-4" />
+                            {selectedClient.contract_end ? (
+                              format(new Date(selectedClient.contract_end), 'dd/MM/yyyy')
+                            ) : (
+                              <span className="text-muted-foreground">Selecione uma data</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <CalendarComponent
+                            mode="single"
+                            selected={selectedClient.contract_end ? new Date(selectedClient.contract_end) : undefined}
+                            onSelect={(date) => setSelectedClient({...selectedClient, contract_end: date ? date.toISOString() : null})}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+};
+
+export default Clientes;
