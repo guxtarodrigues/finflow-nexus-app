@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, CreditCard, Bell, Lock, Database, Globe, Smartphone, PanelLeft, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,19 +7,39 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
+import { ProfileForm } from '@/components/profile/ProfileForm';
+import { StripeIntegration } from '@/components/payments/StripeIntegration';
+import { useToast } from '@/components/ui/use-toast';
 
 const Configuracoes = () => {
+  const [activeTab, setActiveTab] = useState('perfil');
+  const { toast } = useToast();
+
+  const handleSaveChanges = () => {
+    toast({
+      title: "Alterações salvas",
+      description: "Todas as configurações foram salvas com sucesso.",
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">Configurações</h1>
-        <Button className="bg-fin-green hover:bg-fin-green/90 text-black">
+        <Button 
+          className="bg-fin-green hover:bg-fin-green/90 text-black"
+          onClick={handleSaveChanges}
+        >
           <Save className="mr-2 h-4 w-4" />
           Salvar Alterações
         </Button>
       </div>
 
-      <Tabs defaultValue="perfil" className="w-full">
+      <Tabs 
+        value={activeTab} 
+        onValueChange={setActiveTab} 
+        className="w-full"
+      >
         <div className="flex">
           <div className="w-64 border-r border-[#2A2A2E] pr-4">
             <TabsList className="flex flex-col h-auto bg-transparent space-y-1 w-full justify-start items-start">
@@ -91,27 +111,14 @@ const Configuracoes = () => {
                     Gerencie suas informações pessoais e de contato
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm text-[#94949F]">Nome</label>
-                      <Input className="bg-[#2A2A2E] border-[#3A3A3E]" defaultValue="João Silva" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm text-[#94949F]">Sobrenome</label>
-                      <Input className="bg-[#2A2A2E] border-[#3A3A3E]" defaultValue="Pereira" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm text-[#94949F]">Email</label>
-                      <Input className="bg-[#2A2A2E] border-[#3A3A3E]" defaultValue="joao.silva@exemplo.com" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm text-[#94949F]">Telefone</label>
-                      <Input className="bg-[#2A2A2E] border-[#3A3A3E]" defaultValue="(11) 98765-4321" />
-                    </div>
-                  </div>
+                <CardContent>
+                  <ProfileForm />
                 </CardContent>
               </Card>
+            </TabsContent>
+            
+            <TabsContent value="metodos" className="mt-0">
+              <StripeIntegration />
             </TabsContent>
             
             <TabsContent value="notificacoes" className="mt-0">
@@ -155,22 +162,6 @@ const Configuracoes = () => {
               </Card>
             </TabsContent>
             
-            <TabsContent value="metodos" className="mt-0">
-              <Card className="bg-[#1F1F23] border-[#2A2A2E] text-white shadow">
-                <CardHeader>
-                  <CardTitle>Métodos de Pagamento</CardTitle>
-                  <CardDescription className="text-[#94949F]">
-                    Gerencie seus cartões e contas bancárias
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-center h-40 border border-dashed border-[#2A2A2E] rounded-md">
-                    <span className="text-[#94949F]">Métodos de pagamento serão exibidos aqui</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-            
             <TabsContent value="seguranca" className="mt-0">
               <Card className="bg-[#1F1F23] border-[#2A2A2E] text-white shadow">
                 <CardHeader>
@@ -179,10 +170,34 @@ const Configuracoes = () => {
                     Gerencie a segurança da sua conta
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-center h-40 border border-dashed border-[#2A2A2E] rounded-md">
-                    <span className="text-[#94949F]">Configurações de segurança serão exibidas aqui</span>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm text-[#94949F]">Senha atual</label>
+                    <Input 
+                      type="password" 
+                      className="bg-[#2A2A2E] border-[#3A3A3E]" 
+                      placeholder="Digite sua senha atual" 
+                    />
                   </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-[#94949F]">Nova senha</label>
+                    <Input 
+                      type="password" 
+                      className="bg-[#2A2A2E] border-[#3A3A3E]" 
+                      placeholder="Digite uma nova senha" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-[#94949F]">Confirmar nova senha</label>
+                    <Input 
+                      type="password" 
+                      className="bg-[#2A2A2E] border-[#3A3A3E]" 
+                      placeholder="Confirme sua nova senha" 
+                    />
+                  </div>
+                  <Button className="w-full mt-4 bg-fin-green hover:bg-fin-green/90 text-black">
+                    Atualizar senha
+                  </Button>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -195,10 +210,27 @@ const Configuracoes = () => {
                     Gerencie seus dados e preferências de privacidade
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-center h-40 border border-dashed border-[#2A2A2E] rounded-md">
-                    <span className="text-[#94949F]">Configurações de privacidade serão exibidas aqui</span>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm">Compartilhar dados de uso anônimos</p>
+                        <p className="text-xs text-[#94949F]">Ajude-nos a melhorar o aplicativo compartilhando dados anônimos de uso</p>
+                      </div>
+                      <Switch defaultChecked />
+                    </div>
+                    <Separator className="bg-[#2A2A2E]" />
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm">Receber emails de marketing</p>
+                        <p className="text-xs text-[#94949F]">Receba emails sobre novos recursos e promoções</p>
+                      </div>
+                      <Switch />
+                    </div>
                   </div>
+                  <Button variant="destructive" className="w-full mt-6">
+                    Solicitar exclusão dos meus dados
+                  </Button>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -211,9 +243,24 @@ const Configuracoes = () => {
                     Personalize a aparência do aplicativo
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-center h-40 border border-dashed border-[#2A2A2E] rounded-md">
-                    <span className="text-[#94949F]">Configurações de aparência serão exibidas aqui</span>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm">Modo escuro</p>
+                        <p className="text-xs text-[#94949F]">Usar o tema escuro em toda a aplicação</p>
+                      </div>
+                      <Switch defaultChecked />
+                    </div>
+                    <Separator className="bg-[#2A2A2E]" />
+                    <div className="space-y-2">
+                      <label className="text-sm text-[#94949F]">Tamanho da fonte</label>
+                      <div className="flex gap-2">
+                        <Button variant="outline" className="border-[#3A3A3E] flex-1">Pequeno</Button>
+                        <Button variant="outline" className="border-[#3A3A3E] bg-fin-green/10 text-fin-green flex-1">Médio</Button>
+                        <Button variant="outline" className="border-[#3A3A3E] flex-1">Grande</Button>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -228,8 +275,11 @@ const Configuracoes = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center justify-center h-40 border border-dashed border-[#2A2A2E] rounded-md">
-                    <span className="text-[#94949F]">Aplicativos conectados serão exibidos aqui</span>
+                  <div className="text-center py-8 text-[#94949F]">
+                    <p>Você não possui aplicativos conectados no momento.</p>
+                    <Button className="mt-4 bg-fin-green hover:bg-fin-green/90 text-black">
+                      Conectar aplicativo
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -243,9 +293,30 @@ const Configuracoes = () => {
                     Configure o idioma e preferências regionais
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-center h-40 border border-dashed border-[#2A2A2E] rounded-md">
-                    <span className="text-[#94949F]">Configurações de idioma serão exibidas aqui</span>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm text-[#94949F]">Idioma</label>
+                    <select className="w-full bg-[#2A2A2E] border border-[#3A3A3E] text-white rounded-md px-3 py-2">
+                      <option value="pt-BR">Português (Brasil)</option>
+                      <option value="en-US">English (US)</option>
+                      <option value="es">Español</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-[#94949F]">Formato de data</label>
+                    <select className="w-full bg-[#2A2A2E] border border-[#3A3A3E] text-white rounded-md px-3 py-2">
+                      <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                      <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                      <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-[#94949F]">Moeda padrão</label>
+                    <select className="w-full bg-[#2A2A2E] border border-[#3A3A3E] text-white rounded-md px-3 py-2">
+                      <option value="BRL">Real (R$)</option>
+                      <option value="USD">Dólar Americano ($)</option>
+                      <option value="EUR">Euro (€)</option>
+                    </select>
                   </div>
                 </CardContent>
               </Card>
