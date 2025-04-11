@@ -23,6 +23,12 @@ export const useGoalService = () => {
 
   const fetchGoals = async (): Promise<Goal[]> => {
     try {
+      // Check if user is authenticated
+      if (!user) {
+        console.warn('User not authenticated, cannot fetch goals');
+        return [];
+      }
+
       // Check connection to Supabase first
       const { error: connectionError } = await supabase.from('goals').select('count').limit(1).single();
       
@@ -45,6 +51,7 @@ export const useGoalService = () => {
       const { data, error } = await supabase
         .from('goals')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) {
