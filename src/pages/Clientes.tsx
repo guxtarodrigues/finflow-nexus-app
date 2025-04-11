@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   Users, 
@@ -61,7 +60,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { format, parseISO, startOfMonth, endOfMonth, addMonths, setDate, isValid, getDate } from "date-fns";
+import { format, parseISO, startOfMonth, endOfMonth, addMonths, setDate, isValid, getDate, isSameMonth, differenceInMonths } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -194,50 +193,47 @@ const Clientes = () => {
       if (clientError) throw clientError;
       
       if (newClient.recurring_payment && newClient.monthly_value && newClient.monthly_value > 0) {
-        // Create monthly payments if recurring is enabled
-        if (newClient.contract_start) {
+        // Create one payment per month for the entire contract period
+        if (newClient.contract_start && newClient.contract_end) {
           const startDate = new Date(newClient.contract_start);
-          let endDate = new Date();
+          const endDate = new Date(newClient.contract_end);
           
-          // Use contract end date if provided, otherwise set to one year from start
-          if (newClient.contract_end) {
-            endDate = new Date(newClient.contract_end);
-          } else {
-            endDate = addMonths(startDate, 12); // Default to 1 year if no end date
-          }
+          // Calculate payment due day (default to 5th if not specified)
+          const dueDayOfMonth = newClient.payment_due_day || 5;
           
-          const currentDate = new Date();
-          const dueDayOfMonth = newClient.payment_due_day || 5; // Default to 5th if not specified
-          
-          // Create monthly transactions from start to end date
+          // Calculate how many months between start and end dates
+          const monthsDifference = differenceInMonths(endDate, startDate);
           const transactions = [];
           
-          // Start with the first payment date
-          let paymentDate = new Date(startDate);
-          paymentDate.setDate(dueDayOfMonth); // Set to the payment due day
-          
-          // If the day has already passed in the first month, move to next month
-          if (paymentDate < startDate) {
-            paymentDate = addMonths(paymentDate, 1);
-          }
-          
-          // Create one transaction per month until end date
-          while (paymentDate <= endDate) {
-            transactions.push({
-              user_id: user.id,
-              client_id: clientResult.id,
-              description: `Mensalidade - ${newClient.name}`,
-              category: 'Receita de Cliente',
-              type: 'income',
-              value: newClient.monthly_value,
-              date: currentDate.toISOString(),
-              due_date: paymentDate.toISOString(), 
-              status: 'pending',
-              recurrence: 'monthly'
-            });
+          // Create one transaction per month from start date to end date
+          for (let i = 0; i <= monthsDifference; i++) {
+            // Calculate the payment date for this month
+            const paymentDate = addMonths(startDate, i);
             
-            // Move to next month
-            paymentDate = addMonths(paymentDate, 1);
+            // Set the day of month to the due day
+            const dueDate = new Date(paymentDate);
+            dueDate.setDate(dueDayOfMonth);
+            
+            // If due date is before start date in the first month, adjust to next month
+            if (i === 0 && dueDate < startDate) {
+              dueDate.setMonth(dueDate.getMonth() + 1);
+            }
+            
+            // Only add this payment if the due date is before or equal to the contract end date
+            if (dueDate <= endDate) {
+              transactions.push({
+                user_id: user.id,
+                client_id: clientResult.id,
+                description: `Mensalidade - ${newClient.name}`,
+                category: 'Receita de Cliente',
+                type: 'income',
+                value: newClient.monthly_value,
+                date: new Date().toISOString(),
+                due_date: dueDate.toISOString(),
+                status: 'pending',
+                recurrence: 'monthly'
+              });
+            }
           }
           
           // Insert all transactions
@@ -256,7 +252,7 @@ const Clientes = () => {
             }
           }
         } else {
-          // If no contract start date, just create one transaction for current month
+          // If no contract dates, just create one transaction for current month
           const currentDate = new Date();
           const paymentDate = new Date();
           if (newClient.payment_due_day) {
@@ -278,7 +274,7 @@ const Clientes = () => {
             date: currentDate.toISOString(),
             due_date: paymentDate.toISOString(),
             status: 'pending',
-            recurrence: newClient.contract_end ? 'monthly' : 'once'
+            recurrence: 'once'
           };
           
           const { error: transactionError } = await supabase
