@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { 
   Users, 
@@ -60,7 +61,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { format, parseISO, startOfMonth, endOfMonth } from "date-fns";
+import { format, parseISO, startOfMonth, endOfMonth, addMonths, setDate, isValid, getDate } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -70,6 +71,7 @@ import { ClientTransactionsList } from "@/components/clients/ClientTransactionsL
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClientCard } from "@/components/clients/ClientCard";
 import { MetricCard } from "@/components/dashboard/MetricCard";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 const Clientes = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -92,7 +94,8 @@ const Clientes = () => {
     monthly_value: 0,
     status: "active",
     recurring_payment: false,
-    description: ""
+    description: "",
+    payment_due_day: 5
   });
   
   const [startDateOpen, setStartDateOpen] = useState(false);
@@ -190,31 +193,98 @@ const Clientes = () => {
       if (clientError) throw clientError;
       
       if (newClient.recurring_payment && newClient.monthly_value && newClient.monthly_value > 0) {
-        const currentDate = new Date();
-        const transactionData = {
-          user_id: user.id,
-          client_id: clientResult.id,
-          description: `Mensalidade - ${newClient.name}`,
-          category: 'Receita de Cliente',
-          type: 'income',
-          value: newClient.monthly_value,
-          date: currentDate.toISOString(),
-          due_date: currentDate.toISOString(),
-          status: 'pending',
-          recurrence: newClient.contract_end ? 'monthly' : 'once'
-        };
-        
-        const { error: transactionError } = await supabase
-          .from('transactions')
-          .insert(transactionData);
-        
-        if (transactionError) {
-          console.error('Error creating initial transaction:', transactionError);
-          toast({
-            title: "Cliente criado, mas houve um erro ao criar o recebimento",
-            description: transactionError.message,
-            variant: "destructive"
-          });
+        // Create all future payments up to contract end date
+        if (newClient.contract_start && newClient.contract_end) {
+          const startDate = new Date(newClient.contract_start);
+          const endDate = new Date(newClient.contract_end);
+          const currentDate = new Date();
+          const dueDayOfMonth = newClient.payment_due_day || 5; // Default to 5th if not specified
+          
+          let paymentDate = new Date(startDate);
+          // Set the payment due day
+          paymentDate = setDate(paymentDate, dueDayOfMonth);
+          
+          // If the due date is before the start date for the first month, move to next month
+          if (paymentDate < startDate) {
+            paymentDate = addMonths(paymentDate, 1);
+          }
+          
+          const transactions = [];
+          
+          // Create a transaction for each month from start to end date
+          while (paymentDate <= endDate) {
+            const transactionData = {
+              user_id: user.id,
+              client_id: clientResult.id,
+              description: `Mensalidade - ${newClient.name}`,
+              category: 'Receita de Cliente',
+              type: 'income',
+              value: newClient.monthly_value,
+              date: currentDate.toISOString(),
+              due_date: paymentDate.toISOString(),
+              status: 'pending',
+              recurrence: 'monthly'
+            };
+            
+            transactions.push(transactionData);
+            
+            // Move to next month
+            paymentDate = addMonths(paymentDate, 1);
+          }
+          
+          // Insert all transactions at once
+          if (transactions.length > 0) {
+            const { error: transactionError } = await supabase
+              .from('transactions')
+              .insert(transactions);
+            
+            if (transactionError) {
+              console.error('Error creating future transactions:', transactionError);
+              toast({
+                title: "Cliente criado, mas houve um erro ao criar alguns recebimentos futuros",
+                description: transactionError.message,
+                variant: "destructive"
+              });
+            }
+          }
+        } else {
+          // If no contract end date, just create one transaction
+          const currentDate = new Date();
+          const paymentDate = new Date();
+          if (newClient.payment_due_day) {
+            paymentDate.setDate(newClient.payment_due_day);
+          }
+          
+          // If the due date is in the past for this month, move to next month
+          if (paymentDate < currentDate) {
+            paymentDate.setMonth(paymentDate.getMonth() + 1);
+          }
+          
+          const transactionData = {
+            user_id: user.id,
+            client_id: clientResult.id,
+            description: `Mensalidade - ${newClient.name}`,
+            category: 'Receita de Cliente',
+            type: 'income',
+            value: newClient.monthly_value,
+            date: currentDate.toISOString(),
+            due_date: paymentDate.toISOString(),
+            status: 'pending',
+            recurrence: newClient.contract_end ? 'monthly' : 'once'
+          };
+          
+          const { error: transactionError } = await supabase
+            .from('transactions')
+            .insert(transactionData);
+          
+          if (transactionError) {
+            console.error('Error creating initial transaction:', transactionError);
+            toast({
+              title: "Cliente criado, mas houve um erro ao criar o recebimento",
+              description: transactionError.message,
+              variant: "destructive"
+            });
+          }
         }
       }
       
@@ -227,7 +297,8 @@ const Clientes = () => {
         monthly_value: 0,
         status: "active",
         recurring_payment: false,
-        description: ""
+        description: "",
+        payment_due_day: 5
       });
       
       setIsDialogOpen(false);
@@ -708,6 +779,29 @@ const Clientes = () => {
               <Label htmlFor="recurring_payment">Pagamento Recorrente</Label>
             </div>
             
+            {newClient.recurring_payment && (
+              <div className="grid gap-2">
+                <Label htmlFor="payment_due_day">Dia de Vencimento do Pagamento</Label>
+                <Input
+                  id="payment_due_day"
+                  type="number"
+                  min="1"
+                  max="31"
+                  className="bg-[#1F1F23] border-[#2A2A2E]"
+                  placeholder="5"
+                  value={newClient.payment_due_day || ""}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value);
+                    const day = isNaN(value) ? null : Math.min(Math.max(value, 1), 31);
+                    setNewClient({...newClient, payment_due_day: day});
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Dia do mês em que o pagamento vence (1-31)
+                </p>
+              </div>
+            )}
+            
             <div className="grid gap-2">
               <Label htmlFor="description">Descrição</Label>
               <Textarea
@@ -875,6 +969,28 @@ const Clientes = () => {
                     />
                     <Label htmlFor="edit-recurring_payment">Pagamento Recorrente</Label>
                   </div>
+                  
+                  {selectedClient.recurring_payment && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-payment_due_day">Dia de Vencimento do Pagamento</Label>
+                      <Input
+                        id="edit-payment_due_day"
+                        type="number"
+                        min="1"
+                        max="31"
+                        placeholder="5"
+                        value={selectedClient.payment_due_day || ""}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value);
+                          const day = isNaN(value) ? null : Math.min(Math.max(value, 1), 31);
+                          setSelectedClient({...selectedClient, payment_due_day: day});
+                        }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Dia do mês em que o pagamento vence (1-31)
+                      </p>
+                    </div>
+                  )}
                   
                   <div className="space-y-2">
                     <Label htmlFor="edit-description">Descrição</Label>
