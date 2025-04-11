@@ -60,7 +60,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { format, parseISO, startOfMonth, endOfMonth, addMonths, setDate, isValid, getDate, isSameMonth, differenceInMonths } from "date-fns";
+import { format, parseISO, startOfMonth, endOfMonth } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -70,10 +70,8 @@ import { ClientTransactionsList } from "@/components/clients/ClientTransactionsL
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClientCard } from "@/components/clients/ClientCard";
 import { MetricCard } from "@/components/dashboard/MetricCard";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 const Clientes = () => {
-  
   const [clients, setClients] = useState<Client[]>([]);
   const [paidClients, setPaidClients] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,8 +92,7 @@ const Clientes = () => {
     monthly_value: 0,
     status: "active",
     recurring_payment: false,
-    description: "",
-    payment_due_day: 5
+    description: ""
   });
   
   const [startDateOpen, setStartDateOpen] = useState(false);
@@ -193,106 +190,34 @@ const Clientes = () => {
       if (clientError) throw clientError;
       
       if (newClient.recurring_payment && newClient.monthly_value && newClient.monthly_value > 0) {
-        // Create one payment per month for the entire contract period
-        if (newClient.contract_start && newClient.contract_end) {
-          const startDate = new Date(newClient.contract_start);
-          const endDate = new Date(newClient.contract_end);
-          
-          // Calculate payment due day (default to 5th if not specified)
-          const dueDayOfMonth = newClient.payment_due_day || 5;
-          
-          // Calculate how many months between start and end dates
-          const monthsDifference = differenceInMonths(endDate, startDate);
-          const transactions = [];
-          
-          // Create one transaction per month from start date to end date
-          for (let i = 0; i <= monthsDifference; i++) {
-            // Calculate the payment date for this month (base is start date + i months)
-            const currentMonth = addMonths(startDate, i);
-            
-            // Create a due date with the specified payment day in the current month
-            const dueDate = new Date(currentMonth);
-            dueDate.setDate(dueDayOfMonth);
-            
-            // If the due date is before the start date in the first month, move to next month
-            if (i === 0 && dueDate < startDate) {
-              dueDate.setMonth(dueDate.getMonth() + 1);
-            }
-            
-            // Only add this payment if the due date is before or equal to the contract end date
-            if (dueDate <= endDate) {
-              transactions.push({
-                user_id: user.id,
-                client_id: clientResult.id,
-                description: `Mensalidade - ${newClient.name}`,
-                category: 'Receita de Cliente',
-                type: 'income',
-                value: newClient.monthly_value,
-                date: new Date().toISOString(), // Creation date is now
-                due_date: dueDate.toISOString(), // Due date is on payment day of each month
-                status: 'pending',
-                recurrence: 'monthly'
-              });
-            }
-          }
-          
-          // Insert all transactions
-          if (transactions.length > 0) {
-            const { error: transactionError } = await supabase
-              .from('transactions')
-              .insert(transactions);
-            
-            if (transactionError) {
-              console.error('Error creating transactions:', transactionError);
-              toast({
-                title: "Cliente criado, mas houve um erro ao criar alguns recebimentos",
-                description: transactionError.message,
-                variant: "destructive"
-              });
-            }
-          }
-        } else {
-          // If no contract dates, just create one transaction for current month
-          const currentDate = new Date();
-          const paymentDate = new Date();
-          if (newClient.payment_due_day) {
-            paymentDate.setDate(newClient.payment_due_day);
-          }
-          
-          // If the due date is in the past for this month, move to next month
-          if (paymentDate < currentDate) {
-            paymentDate.setMonth(paymentDate.getMonth() + 1);
-          }
-          
-          const transactionData = {
-            user_id: user.id,
-            client_id: clientResult.id,
-            description: `Mensalidade - ${newClient.name}`,
-            category: 'Receita de Cliente',
-            type: 'income',
-            value: newClient.monthly_value,
-            date: currentDate.toISOString(), // Creation date is now
-            due_date: paymentDate.toISOString(), // Due date is on payment due day
-            status: 'pending',
-            recurrence: 'once'
-          };
-          
-          const { error: transactionError } = await supabase
-            .from('transactions')
-            .insert(transactionData);
-          
-          if (transactionError) {
-            console.error('Error creating initial transaction:', transactionError);
-            toast({
-              title: "Cliente criado, mas houve um erro ao criar o recebimento",
-              description: transactionError.message,
-              variant: "destructive"
-            });
-          }
+        const currentDate = new Date();
+        const transactionData = {
+          user_id: user.id,
+          client_id: clientResult.id,
+          description: `Mensalidade - ${newClient.name}`,
+          category: 'Receita de Cliente',
+          type: 'income',
+          value: newClient.monthly_value,
+          date: currentDate.toISOString(),
+          due_date: currentDate.toISOString(),
+          status: 'pending',
+          recurrence: newClient.contract_end ? 'monthly' : 'once'
+        };
+        
+        const { error: transactionError } = await supabase
+          .from('transactions')
+          .insert(transactionData);
+        
+        if (transactionError) {
+          console.error('Error creating initial transaction:', transactionError);
+          toast({
+            title: "Cliente criado, mas houve um erro ao criar o recebimento",
+            description: transactionError.message,
+            variant: "destructive"
+          });
         }
       }
       
-      // Reset form and show success message
       setNewClient({
         name: "",
         email: "",
@@ -302,8 +227,7 @@ const Clientes = () => {
         monthly_value: 0,
         status: "active",
         recurring_payment: false,
-        description: "",
-        payment_due_day: 5
+        description: ""
       });
       
       setIsDialogOpen(false);
@@ -784,29 +708,6 @@ const Clientes = () => {
               <Label htmlFor="recurring_payment">Pagamento Recorrente</Label>
             </div>
             
-            {newClient.recurring_payment && (
-              <div className="grid gap-2">
-                <Label htmlFor="payment_due_day">Dia de Vencimento do Pagamento</Label>
-                <Input
-                  id="payment_due_day"
-                  type="number"
-                  min="1"
-                  max="31"
-                  className="bg-[#1F1F23] border-[#2A2A2E]"
-                  placeholder="5"
-                  value={newClient.payment_due_day || ""}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value);
-                    const day = isNaN(value) ? null : Math.min(Math.max(value, 1), 31);
-                    setNewClient({...newClient, payment_due_day: day});
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Dia do mês em que o pagamento vence (1-31)
-                </p>
-              </div>
-            )}
-            
             <div className="grid gap-2">
               <Label htmlFor="description">Descrição</Label>
               <Textarea
@@ -889,3 +790,156 @@ const Clientes = () => {
                             {selectedClient.contract_start ? (
                               format(new Date(selectedClient.contract_start), 'dd/MM/yyyy')
                             ) : (
+                              <span className="text-muted-foreground">Selecione uma data</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <CalendarComponent
+                            mode="single"
+                            selected={selectedClient.contract_start ? new Date(selectedClient.contract_start) : undefined}
+                            onSelect={(date) => setSelectedClient({...selectedClient, contract_start: date ? date.toISOString() : null})}
+                            initialFocus
+                            className="p-3 pointer-events-auto"
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="edit-contract_end">Fim do Contrato</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal"
+                          >
+                            <Calendar className="mr-2 h-4 w-4" />
+                            {selectedClient.contract_end ? (
+                              format(new Date(selectedClient.contract_end), 'dd/MM/yyyy')
+                            ) : (
+                              <span className="text-muted-foreground">Selecione uma data</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <CalendarComponent
+                            mode="single"
+                            selected={selectedClient.contract_end ? new Date(selectedClient.contract_end) : undefined}
+                            onSelect={(date) => setSelectedClient({...selectedClient, contract_end: date ? date.toISOString() : null})}
+                            initialFocus
+                            className="p-3 pointer-events-auto"
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-monthly_value">Valor Mensal</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5">R$</span>
+                        <Input
+                          id="edit-monthly_value"
+                          type="number"
+                          className="pl-9"
+                          value={selectedClient.monthly_value || ""}
+                          onChange={(e) => setSelectedClient({...selectedClient, monthly_value: parseFloat(e.target.value) || 0})}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-status">Status</Label>
+                      <Select
+                        value={selectedClient.status || "active"}
+                        onValueChange={(value: 'active' | 'inactive') => 
+                          setSelectedClient({...selectedClient, status: value})
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Ativo</SelectItem>
+                          <SelectItem value="inactive">Inativo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="edit-recurring_payment"
+                      checked={selectedClient.recurring_payment}
+                      onCheckedChange={(checked) => setSelectedClient({...selectedClient, recurring_payment: checked})}
+                    />
+                    <Label htmlFor="edit-recurring_payment">Pagamento Recorrente</Label>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-description">Descrição</Label>
+                    <Textarea
+                      id="edit-description"
+                      className="min-h-[100px]"
+                      value={selectedClient.description || ""}
+                      onChange={(e) => setSelectedClient({...selectedClient, description: e.target.value || null})}
+                    />
+                  </div>
+                  
+                  <div className="flex justify-between gap-2 pt-4">
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => setDeleteConfirmOpen(true)}
+                      className="flex items-center"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Excluir Cliente
+                    </Button>
+                    
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setIsEditSheetOpen(false)}>
+                        Cancelar
+                      </Button>
+                      <Button className="bg-fin-green text-black hover:bg-fin-green/90" onClick={handleUpdateClient}>
+                        Salvar alterações
+                      </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+                <TabsContent value="transactions" className="mt-4">
+                  {selectedClient && (
+                    <ClientTransactionsList clientId={selectedClient.id} />
+                  )}
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+      
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent className="bg-[#1A1A1E] border-[#2A2A2E] text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. Isso excluirá permanentemente o cliente e todas as suas informações.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-[#1F1F23] border-[#2A2A2E]">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => selectedClient && handleDeleteClient(selectedClient.id)}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+export default Clientes;

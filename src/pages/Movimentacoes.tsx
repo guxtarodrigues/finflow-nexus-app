@@ -32,7 +32,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { Transaction } from "@/types/transactions";
+
+interface Transaction {
+  id: string;
+  date: string;
+  description: string;
+  category: string;
+  type: string;
+  value: number;
+  status: string;
+}
 
 interface Category {
   id: string;
@@ -159,18 +168,14 @@ const Movimentacoes = () => {
         return;
       }
       
-      const formattedTransactions: Transaction[] = data.map((item) => ({
+      const formattedTransactions = data.map((item) => ({
         id: item.id,
         date: format(new Date(item.date), 'dd/MM/yyyy'),
-        due_date: item.due_date ? format(new Date(item.due_date), 'dd/MM/yyyy') : format(new Date(item.date), 'dd/MM/yyyy'),
         description: item.description,
         category: item.category,
         type: item.type,
         value: Number(item.value),
-        status: item.status,
-        recurrence: item.recurrence,
-        recurrence_count: item.recurrence_count,
-        client_id: item.client_id
+        status: item.status
       }));
       
       setTransactions(formattedTransactions);

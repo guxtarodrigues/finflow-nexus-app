@@ -15,7 +15,6 @@ export interface Client {
   updated_at: string;
   payment_status?: string | null;
   last_payment_date?: string | null;
-  payment_due_day?: number | null;
 }
 
 export interface NewClient {
@@ -31,5 +30,4 @@ export interface NewClient {
   user_id: string;
   payment_status?: string | null;
   last_payment_date?: string | null;
-  payment_due_day?: number | null;
 }
