@@ -194,27 +194,36 @@ const Clientes = () => {
       if (clientError) throw clientError;
       
       if (newClient.recurring_payment && newClient.monthly_value && newClient.monthly_value > 0) {
-        // Create all future payments up to contract end date
-        if (newClient.contract_start && newClient.contract_end) {
+        // Create monthly payments if recurring is enabled
+        if (newClient.contract_start) {
           const startDate = new Date(newClient.contract_start);
-          const endDate = new Date(newClient.contract_end);
+          let endDate = new Date();
+          
+          // Use contract end date if provided, otherwise set to one year from start
+          if (newClient.contract_end) {
+            endDate = new Date(newClient.contract_end);
+          } else {
+            endDate = addMonths(startDate, 12); // Default to 1 year if no end date
+          }
+          
           const currentDate = new Date();
           const dueDayOfMonth = newClient.payment_due_day || 5; // Default to 5th if not specified
           
-          let paymentDate = new Date(startDate);
-          // Set the payment due day
-          paymentDate = setDate(paymentDate, dueDayOfMonth);
+          // Create monthly transactions from start to end date
+          const transactions = [];
           
-          // If the due date is before the start date for the first month, move to next month
+          // Start with the first payment date
+          let paymentDate = new Date(startDate);
+          paymentDate.setDate(dueDayOfMonth); // Set to the payment due day
+          
+          // If the day has already passed in the first month, move to next month
           if (paymentDate < startDate) {
             paymentDate = addMonths(paymentDate, 1);
           }
           
-          const transactions = [];
-          
-          // Create a transaction for each month from start to end date
+          // Create one transaction per month until end date
           while (paymentDate <= endDate) {
-            const transactionData = {
+            transactions.push({
               user_id: user.id,
               client_id: clientResult.id,
               description: `Mensalidade - ${newClient.name}`,
@@ -222,34 +231,32 @@ const Clientes = () => {
               type: 'income',
               value: newClient.monthly_value,
               date: currentDate.toISOString(),
-              due_date: paymentDate.toISOString(),
+              due_date: paymentDate.toISOString(), 
               status: 'pending',
               recurrence: 'monthly'
-            };
-            
-            transactions.push(transactionData);
+            });
             
             // Move to next month
             paymentDate = addMonths(paymentDate, 1);
           }
           
-          // Insert all transactions at once
+          // Insert all transactions
           if (transactions.length > 0) {
             const { error: transactionError } = await supabase
               .from('transactions')
               .insert(transactions);
             
             if (transactionError) {
-              console.error('Error creating future transactions:', transactionError);
+              console.error('Error creating transactions:', transactionError);
               toast({
-                title: "Cliente criado, mas houve um erro ao criar alguns recebimentos futuros",
+                title: "Cliente criado, mas houve um erro ao criar alguns recebimentos",
                 description: transactionError.message,
                 variant: "destructive"
               });
             }
           }
         } else {
-          // If no contract end date, just create one transaction
+          // If no contract start date, just create one transaction for current month
           const currentDate = new Date();
           const paymentDate = new Date();
           if (newClient.payment_due_day) {
@@ -289,6 +296,7 @@ const Clientes = () => {
         }
       }
       
+      // Reset form and show success message
       setNewClient({
         name: "",
         email: "",
