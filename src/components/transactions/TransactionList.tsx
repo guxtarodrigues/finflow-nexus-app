@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { 
   Table,
@@ -27,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 interface Transaction {
   id: string;
   date: string;
+  due_date: string;
   description: string;
   category: string;
   type: string;
@@ -51,6 +51,12 @@ export const TransactionList = ({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const sortedTransactions = [...transactions].sort((a, b) => {
+    const dateA = new Date(a.due_date.split('/').reverse().join('-'));
+    const dateB = new Date(b.due_date.split('/').reverse().join('-'));
+    return dateA.getTime() - dateB.getTime();
+  });
 
   const handleMarkAsReceived = async (id: string) => {
     try {
@@ -103,7 +109,7 @@ export const TransactionList = ({
           <TableHeader className="bg-[#1F1F23]">
             <TableRow className="hover:bg-[#2A2A2E] border-[#2A2A2E]">
               <TableHead className="w-[50px]">Tipo</TableHead>
-              <TableHead className="w-[100px]">Data</TableHead>
+              <TableHead className="w-[100px]">Data de Vencimento</TableHead>
               <TableHead>Descrição</TableHead>
               <TableHead>Categoria</TableHead>
               <TableHead className="text-right">Valor</TableHead>
@@ -120,14 +126,14 @@ export const TransactionList = ({
                   </div>
                 </TableCell>
               </TableRow>
-            ) : transactions.length === 0 ? (
+            ) : sortedTransactions.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                   Nenhuma transação encontrada.
                 </TableCell>
               </TableRow>
             ) : (
-              transactions.map((transaction) => (
+              sortedTransactions.map((transaction) => (
                 <TableRow key={transaction.id} className="hover:bg-[#1F1F23] border-[#2A2A2E]">
                   <TableCell>
                     {transaction.type === "income" ? (
@@ -140,7 +146,7 @@ export const TransactionList = ({
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="font-medium">{transaction.date}</TableCell>
+                  <TableCell className="font-medium">{transaction.due_date || transaction.date}</TableCell>
                   <TableCell>{transaction.description}</TableCell>
                   <TableCell>
                     <Badge variant={transaction.type === "income" ? "success" : "destructive"} className="bg-opacity-20 text-xs">

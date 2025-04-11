@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 interface Transaction {
   id: string;
   date: string;
+  due_date: string;
   description: string;
   category: string;
   type: string;
@@ -58,7 +59,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
         .select('*')
         .eq('client_id', clientId)
         .eq('type', 'income')
-        .order('date', { ascending: false });
+        .order('due_date', { ascending: true }); // Change order to due_date
       
       if (error) throw error;
       
@@ -69,6 +70,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
           processedTransactions.push({
             id: transaction.id,
             date: format(new Date(transaction.date), 'dd/MM/yyyy'),
+            due_date: transaction.due_date ? format(new Date(transaction.due_date), 'dd/MM/yyyy') : format(new Date(transaction.date), 'dd/MM/yyyy'),
             description: transaction.description,
             category: transaction.category,
             type: transaction.type,
@@ -128,10 +130,11 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
           }
         });
         
+        // Sort by due_date
         processedTransactions.sort((a, b) => {
-          const dateA = parseISO(a.date.split('/').reverse().join('-'));
-          const dateB = parseISO(b.date.split('/').reverse().join('-'));
-          return dateB.getTime() - dateA.getTime();
+          const dateA = parseISO(a.due_date.split('/').reverse().join('-'));
+          const dateB = parseISO(b.due_date.split('/').reverse().join('-'));
+          return dateA.getTime() - dateB.getTime(); // Ascending by due date
         });
         
         setTransactions(processedTransactions);
@@ -269,7 +272,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
         <Table>
           <TableHeader className="bg-[#1F1F23]">
             <TableRow className="hover:bg-[#2A2A2E] border-[#2A2A2E]">
-              <TableHead className="w-[100px]">Data</TableHead>
+              <TableHead className="w-[100px]">Data de Vencimento</TableHead>
               <TableHead>Descrição</TableHead>
               <TableHead>Categoria</TableHead>
               <TableHead className="text-right">Valor</TableHead>
@@ -300,7 +303,7 @@ export const ClientTransactionsList = ({ clientId }: ClientTransactionsListProps
                   className={`hover:bg-[#1F1F23] border-[#2A2A2E] ${transaction.id.includes('recurrence') ? 'bg-[#1A1A1E]/30' : ''}`}
                 >
                   <TableCell className="font-medium">
-                    {transaction.date}
+                    {transaction.due_date}
                     {transaction.recurrence_count && (
                       <span className="ml-1">
                         <RefreshCcw className="h-3 w-3 inline text-fin-green" />
