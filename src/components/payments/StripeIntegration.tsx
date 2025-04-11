@@ -7,6 +7,18 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
+// Define proper types for the settings object
+interface StripeSettings {
+  stripeCustomerId?: string;
+  stripeSubscriptionStatus?: string;
+  stripeSubscriptionId?: string;
+  stripeSubscriptionPeriodEnd?: string;
+}
+
+interface ProfileSettings {
+  settings?: StripeSettings | null;
+}
+
 export function StripeIntegration() {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -27,7 +39,10 @@ export function StripeIntegration() {
         .eq('id', user?.id)
         .single();
 
-      if (profileData?.settings?.stripeCustomerId) {
+      // Safely check if stripeCustomerId exists within settings
+      if (profileData?.settings && 
+          typeof profileData.settings === 'object' && 
+          'stripeCustomerId' in profileData.settings) {
         setHasStripeSubscription(true);
       }
     } catch (error) {
