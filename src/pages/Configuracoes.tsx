@@ -13,6 +13,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Json } from '@/integrations/supabase/types';
+
+interface UserSettings {
+  darkMode?: boolean;
+  fontSize?: string;
+  language?: string;
+  dateFormat?: string;
+  currency?: string;
+  [key: string]: any;
+}
 
 const Configuracoes = () => {
   const [activeTab, setActiveTab] = useState('perfil');
@@ -45,15 +55,28 @@ const Configuracoes = () => {
       if (error) throw error;
 
       if (profileData?.settings) {
-        const settings = profileData.settings;
+        const settings = profileData.settings as UserSettings;
         
         if (typeof settings === 'object') {
-          if ('darkMode' in settings) setDarkMode(settings.darkMode);
-          if ('fontSize' in settings) setFontSize(settings.fontSize);
+          if ('darkMode' in settings && typeof settings.darkMode === 'boolean') {
+            setDarkMode(settings.darkMode);
+          }
           
-          if ('language' in settings) setLanguage(settings.language);
-          if ('dateFormat' in settings) setDateFormat(settings.dateFormat);
-          if ('currency' in settings) setCurrency(settings.currency);
+          if ('fontSize' in settings && typeof settings.fontSize === 'string') {
+            setFontSize(settings.fontSize);
+          }
+          
+          if ('language' in settings && typeof settings.language === 'string') {
+            setLanguage(settings.language);
+          }
+          
+          if ('dateFormat' in settings && typeof settings.dateFormat === 'string') {
+            setDateFormat(settings.dateFormat);
+          }
+          
+          if ('currency' in settings && typeof settings.currency === 'string') {
+            setCurrency(settings.currency);
+          }
         }
       }
     } catch (error) {
@@ -78,8 +101,9 @@ const Configuracoes = () => {
         
       if (fetchError) throw fetchError;
       
-      const currentSettings = profileData?.settings || {};
-      const updatedSettings = {
+      const currentSettings = (profileData?.settings as UserSettings) || {};
+      
+      const updatedSettings: UserSettings = {
         ...currentSettings,
         darkMode,
         fontSize,
