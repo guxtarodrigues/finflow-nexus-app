@@ -55,6 +55,7 @@ export type Database = {
         Row: {
           color: string | null
           created_at: string
+          dre_classification: string | null
           id: string
           name: string
           type: string
@@ -64,6 +65,7 @@ export type Database = {
         Insert: {
           color?: string | null
           created_at?: string
+          dre_classification?: string | null
           id?: string
           name: string
           type: string
@@ -73,6 +75,7 @@ export type Database = {
         Update: {
           color?: string | null
           created_at?: string
+          dre_classification?: string | null
           id?: string
           name?: string
           type?: string
@@ -137,6 +140,80 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      dre_snapshots: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          custo_produtos_servicos: number
+          data_snapshot: Json
+          deducoes: number
+          despesas_operacionais: number
+          id: string
+          impostos: number
+          lucro_antes_impostos: number
+          lucro_bruto: number
+          lucro_liquido: number
+          period_end: string
+          period_start: string
+          receita_bruta: number
+          receita_liquida: number
+          resultado_financeiro: number
+          resultado_operacional: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          custo_produtos_servicos?: number
+          data_snapshot?: Json
+          deducoes?: number
+          despesas_operacionais?: number
+          id?: string
+          impostos?: number
+          lucro_antes_impostos?: number
+          lucro_bruto?: number
+          lucro_liquido?: number
+          period_end: string
+          period_start: string
+          receita_bruta?: number
+          receita_liquida?: number
+          resultado_financeiro?: number
+          resultado_operacional?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          custo_produtos_servicos?: number
+          data_snapshot?: Json
+          deducoes?: number
+          despesas_operacionais?: number
+          id?: string
+          impostos?: number
+          lucro_antes_impostos?: number
+          lucro_bruto?: number
+          lucro_liquido?: number
+          period_end?: string
+          period_start?: string
+          receita_bruta?: number
+          receita_liquida?: number
+          resultado_financeiro?: number
+          resultado_operacional?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dre_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       goals: {
         Row: {

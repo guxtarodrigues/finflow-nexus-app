@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -15,6 +14,7 @@ import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import DRE from "./pages/DRE";
 
 // New page imports
 import Analises from "./pages/Analises";
@@ -51,6 +51,7 @@ const App = () => {
                   <Route path="/clientes" element={<Clientes />} />
                   <Route path="/investimentos" element={<Investimentos />} />
                   <Route path="/recebimentos" element={<Recebimentos />} />
+                  <Route path="/dre" element={<DRE />} />
                   
                   {/* New routes */}
                   <Route path="/analises" element={<Analises />} />
