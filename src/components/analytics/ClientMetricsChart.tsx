@@ -6,11 +6,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Users } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { Client } from "@/types/clients";
 
 interface ClientData {
   name: string;
   value: number;
+}
+
+interface ClientMetrics {
+  id: string;
+  name: string;
+  monthly_value: number;
 }
 
 export const ClientMetricsChart = () => {
@@ -37,9 +42,9 @@ export const ClientMetricsChart = () => {
         if (clientsError) throw clientsError;
         
         // Format client data for the chart
-        const chartData = clientsData
-          .filter((client: Client) => client.monthly_value !== null && client.monthly_value > 0)
-          .map((client: Client) => ({
+        const chartData = (clientsData as ClientMetrics[])
+          .filter((client) => client.monthly_value !== null && client.monthly_value > 0)
+          .map((client) => ({
             name: client.name,
             value: client.monthly_value || 0
           }));
