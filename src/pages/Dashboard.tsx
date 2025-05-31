@@ -11,6 +11,7 @@ import { startOfMonth, endOfMonth, format, addMonths, subMonths, isAfter, isBefo
 import { Client } from "@/types/clients";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BalanceVsExpensesChart } from "@/components/dashboard/BalanceVsExpensesChart";
+import { DateFilter } from "@/components/payments/DateFilter";
 
 interface Payment {
   id: string;
@@ -36,8 +37,6 @@ interface FinancialData {
   paymentsReceived: number;
   pendingPayments: number;
   overduePayments: number;
-  totalIncome: number;
-  totalExpenses: number;
 }
 
 const Dashboard = () => {
@@ -45,6 +44,14 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  
+  // Controle de período
+  const [dateRange, setDateRange] = useState({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date())
+  });
+  const [dateFilterMode, setDateFilterMode] = useState<"current" | "prev" | "next" | "custom">("current");
+  
   const [financialData, setFinancialData] = useState<FinancialData>({
     totalBalance: 0,
     monthlyIncome: 0,
@@ -58,46 +65,48 @@ const Dashboard = () => {
     clientsIncome: 0,
     paymentsReceived: 0,
     pendingPayments: 0,
-    overduePayments: 0,
-    totalIncome: 0,
-    totalExpenses: 0
+    overduePayments: 0
   });
 
   useEffect(() => {
     if (user) {
       fetchFinancialData();
     }
-  }, [user]);
+  }, [user, dateRange]);
 
   const fetchFinancialData = async () => {
     try {
       setLoading(true);
       
-      const currentMonthStart = startOfMonth(new Date());
-      const currentMonthEnd = endOfMonth(new Date());
+      const periodStart = dateRange.from;
+      const periodEnd = dateRange.to;
       const now = new Date();
       
-      console.log('Período atual:', format(currentMonthStart, 'dd/MM/yyyy'), 'até', format(currentMonthEnd, 'dd/MM/yyyy'));
+      console.log('Período selecionado:', format(periodStart, 'dd/MM/yyyy'), 'até', format(periodEnd, 'dd/MM/yyyy'));
       
-      // Buscar todas as transações
+      // Buscar transações do período selecionado
       const { data: transactions, error: transactionsError } = await supabase
         .from('transactions')
         .select('*')
-        .eq('user_id', user?.id);
+        .eq('user_id', user?.id)
+        .gte('date', periodStart.toISOString())
+        .lte('date', periodEnd.toISOString());
       
       if (transactionsError) throw transactionsError;
       
-      console.log('Total de transações:', transactions?.length || 0);
+      console.log('Transações do período:', transactions?.length || 0);
       
-      // Buscar todos os pagamentos
+      // Buscar pagamentos do período selecionado
       const { data: payments, error: paymentsError } = await supabase
         .from('payments')
         .select('*')
-        .eq('user_id', user?.id);
+        .eq('user_id', user?.id)
+        .gte('due_date', periodStart.toISOString())
+        .lte('due_date', periodEnd.toISOString());
       
       if (paymentsError) throw paymentsError;
       
-      console.log('Total de pagamentos:', payments?.length || 0);
+      console.log('Pagamentos do período:', payments?.length || 0);
       
       // Buscar clientes ativos
       const { data: clientsData, error: clientsError } = await supabase
@@ -108,138 +117,156 @@ const Dashboard = () => {
       if (clientsError) throw clientsError;
       
       const clients = clientsData as Client[] || [];
-      const activeClients = clients.filter(client => client.status === 'active');
+      const activeClients = clients.filter(client => 
+        client.status === 'active' && 
+        (!client.contract_end || new Date(client.contract_end) >= periodStart)
+      );
       
-      // === DADOS DO MÊS ATUAL ===
+      // === CÁLCULOS DO PERÍODO SELECIONADO ===
       
-      // Transações do mês atual
-      const currentMonthTransactions = transactions?.filter(tx => {
-        const txDate = new Date(tx.date);
-        return txDate >= currentMonthStart && txDate <= currentMonthEnd;
-      }) || [];
+      // Receitas do período (transações)
+      const periodIncome = transactions
+        ?.filter(tx => tx.type === 'income')
+        .reduce((sum, tx) => sum + Number(tx.value), 0) || 0;
       
-      console.log('Transações do mês atual:', currentMonthTransactions.length);
+      // Despesas do período
+      const periodExpense = transactions
+        ?.filter(tx => tx.type === 'expense')
+        .reduce((sum, tx) => sum + Number(tx.value), 0) || 0;
       
-      // Receitas do mês atual (apenas transações)
-      const currentMonthIncome = currentMonthTransactions
-        .filter(tx => tx.type === 'income')
-        .reduce((sum, tx) => sum + Number(tx.value), 0);
+      console.log('Receitas do período:', periodIncome);
+      console.log('Despesas do período:', periodExpense);
       
-      // Despesas do mês atual
-      const currentMonthExpense = currentMonthTransactions
-        .filter(tx => tx.type === 'expense')
-        .reduce((sum, tx) => sum + Number(tx.value), 0);
-      
-      console.log('Receitas do mês:', currentMonthIncome);
-      console.log('Despesas do mês:', currentMonthExpense);
-      
-      // Receitas mensais de clientes ativos (valor recorrente)
+      // Receitas de clientes ativos (proporcional ao período se for mensal)
+      const daysInPeriod = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24));
       const monthlyClientsIncome = activeClients
         .filter(client => 
           client.recurring_payment && 
           client.monthly_value && 
-          (!client.contract_end || new Date(client.contract_end) >= now)
+          (!client.contract_start || new Date(client.contract_start) <= periodEnd) &&
+          (!client.contract_end || new Date(client.contract_end) >= periodStart)
         )
-        .reduce((sum, client) => sum + (client.monthly_value || 0), 0);
+        .reduce((sum, client) => {
+          const monthlyValue = client.monthly_value || 0;
+          // Se o período for um mês completo, retorna o valor mensal
+          // Senão, calcula proporcional aos dias
+          if (daysInPeriod >= 28 && daysInPeriod <= 31) {
+            return sum + monthlyValue;
+          } else {
+            return sum + (monthlyValue * daysInPeriod / 30);
+          }
+        }, 0);
       
-      console.log('Receita mensal de clientes:', monthlyClientsIncome);
+      console.log('Receita de clientes do período:', monthlyClientsIncome);
       
-      // === PAGAMENTOS DO MÊS ATUAL ===
+      // === PAGAMENTOS DO PERÍODO ===
       
-      // Pagamentos recebidos no mês atual
-      const currentMonthPaymentsReceived = payments
-        ?.filter(payment => {
-          if (payment.status !== 'completed') return false;
-          const paymentDate = new Date(payment.due_date);
-          return paymentDate >= currentMonthStart && paymentDate <= currentMonthEnd;
-        })
-        .reduce((sum, payment) => sum + Number(payment.value), 0) || 0;
-      
-      console.log('Pagamentos recebidos no mês:', currentMonthPaymentsReceived);
-      
-      // Pagamentos pendentes do mês atual (dentro do prazo)
-      const currentMonthPendingPayments = payments
-        ?.filter(payment => {
-          if (payment.status !== 'pending') return false;
-          const dueDate = new Date(payment.due_date);
-          return dueDate >= currentMonthStart && dueDate <= currentMonthEnd && dueDate >= now;
-        })
-        .reduce((sum, payment) => sum + Number(payment.value), 0) || 0;
-      
-      // Pagamentos em atraso (vencidos até hoje)
-      const overduePayments = payments
-        ?.filter(payment => {
-          if (payment.status !== 'pending') return false;
-          const dueDate = new Date(payment.due_date);
-          return dueDate < now;
-        })
-        .reduce((sum, payment) => sum + Number(payment.value), 0) || 0;
-      
-      console.log('Pagamentos pendentes no mês:', currentMonthPendingPayments);
-      console.log('Pagamentos em atraso:', overduePayments);
-      
-      // === TOTAIS HISTÓRICOS (para saldo total) ===
-      
-      // Total de receitas (todas as transações de receita)
-      const allTimeIncome = transactions
-        ?.filter(tx => tx.type === 'income')
-        .reduce((sum, tx) => sum + Number(tx.value), 0) || 0;
-      
-      // Total de despesas (todas as transações de despesa)
-      const allTimeExpense = transactions
-        ?.filter(tx => tx.type === 'expense')
-        .reduce((sum, tx) => sum + Number(tx.value), 0) || 0;
-      
-      // Total de pagamentos efetivamente recebidos (histórico completo)
-      const allTimePaymentsReceived = payments
+      // Pagamentos recebidos no período
+      const periodPaymentsReceived = payments
         ?.filter(payment => payment.status === 'completed')
         .reduce((sum, payment) => sum + Number(payment.value), 0) || 0;
       
-      // Saldo total = receitas + pagamentos recebidos - despesas
+      // Pagamentos pendentes no período (ainda dentro do prazo)
+      const periodPendingPayments = payments
+        ?.filter(payment => {
+          if (payment.status !== 'pending') return false;
+          const dueDate = new Date(payment.due_date);
+          return dueDate >= now;
+        })
+        .reduce((sum, payment) => sum + Number(payment.value), 0) || 0;
+      
+      // Pagamentos em atraso (vencidos até hoje, independente do período)
+      const { data: overduePaymentsData, error: overdueError } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('status', 'pending')
+        .lt('due_date', now.toISOString());
+      
+      if (overdueError) throw overdueError;
+      
+      const overduePayments = overduePaymentsData
+        ?.reduce((sum, payment) => sum + Number(payment.value), 0) || 0;
+      
+      console.log('Pagamentos recebidos no período:', periodPaymentsReceived);
+      console.log('Pagamentos pendentes no período:', periodPendingPayments);
+      console.log('Pagamentos em atraso (total):', overduePayments);
+      
+      // === SALDO TOTAL (HISTÓRICO) ===
+      
+      // Para o saldo total, buscar TODAS as transações e pagamentos históricos
+      const { data: allTransactions, error: allTransactionsError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user?.id);
+      
+      if (allTransactionsError) throw allTransactionsError;
+      
+      const { data: allCompletedPayments, error: allPaymentsError } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('status', 'completed');
+      
+      if (allPaymentsError) throw allPaymentsError;
+      
+      const allTimeIncome = allTransactions
+        ?.filter(tx => tx.type === 'income')
+        .reduce((sum, tx) => sum + Number(tx.value), 0) || 0;
+      
+      const allTimeExpense = allTransactions
+        ?.filter(tx => tx.type === 'expense')
+        .reduce((sum, tx) => sum + Number(tx.value), 0) || 0;
+      
+      const allTimePaymentsReceived = allCompletedPayments
+        ?.reduce((sum, payment) => sum + Number(payment.value), 0) || 0;
+      
+      // Saldo total = receitas históricas + pagamentos recebidos históricos - despesas históricas
       const totalBalance = allTimeIncome + allTimePaymentsReceived - allTimeExpense;
       
-      console.log('Saldo total calculado:', totalBalance);
-      console.log('  - Receitas históricas:', allTimeIncome);
-      console.log('  - Pagamentos recebidos históricos:', allTimePaymentsReceived);
-      console.log('  - Despesas históricas:', allTimeExpense);
+      console.log('Saldo total histórico:', totalBalance);
       
-      // Próximos pagamentos (5 primeiros pendentes)
-      const upcomingPayments = payments
-        ?.filter(payment => payment.status === 'pending')
-        .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
-        .slice(0, 5) || [];
+      // Próximos pagamentos (independente do período)
+      const { data: upcomingPaymentsData, error: upcomingError } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('status', 'pending')
+        .gte('due_date', now.toISOString())
+        .order('due_date', { ascending: true })
+        .limit(5);
       
-      // Receita total mensal (transações + clientes)
-      const totalMonthlyIncome = currentMonthIncome + monthlyClientsIncome;
+      if (upcomingError) throw upcomingError;
       
-      // Previsões baseadas na média mensal
-      const monthlyIncomeAverage = totalMonthlyIncome;
-      const monthlyExpenseAverage = currentMonthExpense;
+      // Receita total do período (transações + clientes)
+      const totalPeriodIncome = periodIncome + monthlyClientsIncome + periodPaymentsReceived;
+      
+      // Previsões baseadas nos dados do período
+      const monthlyIncomeAverage = totalPeriodIncome;
+      const monthlyExpenseAverage = periodExpense;
       const yearlyForecast = (monthlyIncomeAverage * 12) - (monthlyExpenseAverage * 12);
       const nextMonthForecast = monthlyIncomeAverage - monthlyExpenseAverage;
       
-      // Impostos sobre receita mensal (6%)
-      const taxPayable = totalMonthlyIncome * 0.06;
+      // Impostos sobre receita do período (6%)
+      const taxPayable = totalPeriodIncome * 0.06;
       
       // Economias estimadas (20% do saldo positivo)
       const totalSavings = totalBalance > 0 ? totalBalance * 0.2 : 0;
       
       setFinancialData({
         totalBalance,
-        monthlyIncome: totalMonthlyIncome,
-        monthlyExpense: currentMonthExpense,
+        monthlyIncome: totalPeriodIncome,
+        monthlyExpense: periodExpense,
         totalSavings,
         yearlyForecast,
         nextMonthForecast,
         activeClients: activeClients.length,
         taxPayable,
-        upcomingPayments: upcomingPayments as Payment[] || [],
+        upcomingPayments: upcomingPaymentsData as Payment[] || [],
         clientsIncome: monthlyClientsIncome,
-        paymentsReceived: currentMonthPaymentsReceived, // Agora do mês atual
-        pendingPayments: currentMonthPendingPayments,   // Agora do mês atual
-        overduePayments,
-        totalIncome: allTimeIncome + allTimePaymentsReceived,
-        totalExpenses: allTimeExpense
+        paymentsReceived: periodPaymentsReceived,
+        pendingPayments: periodPendingPayments,
+        overduePayments
       });
     } catch (error: any) {
       console.error('Error fetching financial data:', error);
@@ -251,6 +278,37 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePrevMonth = () => {
+    const prevMonth = subMonths(dateRange.from, 1);
+    setDateRange({
+      from: startOfMonth(prevMonth),
+      to: endOfMonth(prevMonth)
+    });
+    setDateFilterMode("prev");
+  };
+
+  const handleNextMonth = () => {
+    const nextMonth = addMonths(dateRange.from, 1);
+    setDateRange({
+      from: startOfMonth(nextMonth),
+      to: endOfMonth(nextMonth)
+    });
+    setDateFilterMode("next");
+  };
+
+  const handleCurrentMonth = () => {
+    setDateRange({
+      from: startOfMonth(new Date()),
+      to: endOfMonth(new Date())
+    });
+    setDateFilterMode("current");
+  };
+
+  const handleDateRangeChange = (range: { from: Date; to: Date }) => {
+    setDateRange(range);
+    setDateFilterMode("custom");
   };
 
   const handleNewTransaction = () => {
@@ -280,6 +338,20 @@ const Dashboard = () => {
         onNewTransaction={handleNewTransaction}
       />
 
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-semibold text-white">
+          Período: {format(dateRange.from, 'dd/MM/yyyy')} - {format(dateRange.to, 'dd/MM/yyyy')}
+        </h2>
+        <DateFilter
+          dateRange={dateRange}
+          dateFilterMode={dateFilterMode}
+          onPrevMonth={handlePrevMonth}
+          onNextMonth={handleNextMonth}
+          onCurrentMonth={handleCurrentMonth}
+          onDateRangeChange={handleDateRangeChange}
+        />
+      </div>
+
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
@@ -291,21 +363,21 @@ const Dashboard = () => {
             <MetricCard
               title="Saldo Total"
               value={formatCurrency(financialData.totalBalance)}
-              subtitle={`Receitas: ${formatCurrency(financialData.totalIncome)} | Despesas: ${formatCurrency(financialData.totalExpenses)}`}
+              subtitle="Acumulado histórico (receitas - despesas)"
               icon="money"
               trend={financialData.totalBalance >= 0 ? "up" : "down"}
             />
             <MetricCard
-              title="Receita Mensal"
+              title="Receita do Período"
               value={formatCurrency(financialData.monthlyIncome)}
-              subtitle={`Transações + Clientes (${financialData.activeClients} ativos)`}
+              subtitle={`Transações + Clientes + Pagamentos (${financialData.activeClients} ativos)`}
               trend="up"
               icon="income"
             />
             <MetricCard
-              title="Despesa Mensal"
+              title="Despesa do Período"
               value={formatCurrency(financialData.monthlyExpense)}
-              subtitle="Gastos do mês atual"
+              subtitle="Gastos do período selecionado"
               trend="down"
               icon="expense"
             />
@@ -319,8 +391,8 @@ const Dashboard = () => {
 
           <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
             <div className="mb-4">
-              <h3 className="text-lg text-gray-300 font-normal">Saldo Total vs Despesas Mensais</h3>
-              <p className="text-sm text-gray-400">Comparativo entre saldo total acumulado e despesas do mês</p>
+              <h3 className="text-lg text-gray-300 font-normal">Saldo Total vs Despesas do Período</h3>
+              <p className="text-sm text-gray-400">Comparativo entre saldo total acumulado e despesas do período</p>
             </div>
             <BalanceVsExpensesChart 
               totalBalance={financialData.totalBalance} 
@@ -331,7 +403,7 @@ const Dashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg text-gray-300 font-normal">Recebidos (Mês)</h3>
+                <h3 className="text-lg text-gray-300 font-normal">Recebidos (Período)</h3>
                 <div className="h-14 w-14 rounded-full bg-fin-green/20 flex items-center justify-center">
                   <CheckCircle className="h-7 w-7 text-fin-green" />
                 </div>
@@ -340,13 +412,13 @@ const Dashboard = () => {
                 {formatCurrency(financialData.paymentsReceived)}
               </div>
               <div className="flex items-center text-sm">
-                <span className="text-gray-400">Pagamentos confirmados este mês</span>
+                <span className="text-gray-400">Pagamentos confirmados no período</span>
               </div>
             </div>
             
             <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg text-gray-300 font-normal">Pendentes (Mês)</h3>
+                <h3 className="text-lg text-gray-300 font-normal">Pendentes (Período)</h3>
                 <div className="h-14 w-14 rounded-full bg-[#FEC6A1]/20 flex items-center justify-center">
                   <Clock className="h-7 w-7 text-[#FEC6A1]" />
                 </div>
@@ -355,7 +427,7 @@ const Dashboard = () => {
                 {formatCurrency(financialData.pendingPayments)}
               </div>
               <div className="flex items-center text-sm">
-                <span className="text-gray-400">Aguardando pagamento este mês</span>
+                <span className="text-gray-400">Aguardando pagamento no período</span>
               </div>
             </div>
             
@@ -370,7 +442,7 @@ const Dashboard = () => {
                 {formatCurrency(financialData.overduePayments)}
               </div>
               <div className="flex items-center text-sm">
-                <span className="text-fin-red">Pagamentos vencidos</span>
+                <span className="text-fin-red">Pagamentos vencidos (total)</span>
               </div>
             </div>
           </div>
@@ -385,7 +457,7 @@ const Dashboard = () => {
               </div>
               <div className="fin-value">{formatCurrency(financialData.taxPayable)}</div>
               <div className="mt-2 text-sm text-fin-text-secondary">
-                Sobre receita mensal: {formatCurrency(financialData.monthlyIncome)}
+                Sobre receita do período: {formatCurrency(financialData.monthlyIncome)}
               </div>
             </div>
 
