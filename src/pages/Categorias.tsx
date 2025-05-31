@@ -42,8 +42,7 @@ import {
   SheetContent, 
   SheetDescription, 
   SheetHeader, 
-  SheetTitle, 
-  SheetClose 
+  SheetTitle
 } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -235,6 +234,7 @@ const Categorias = () => {
       if (error) throw error;
       
       setIsEditSheetOpen(false);
+      setSelectedCategory(null);
       toast({
         title: "Categoria atualizada",
         description: "A categoria foi atualizada com sucesso"
@@ -271,6 +271,16 @@ const Categorias = () => {
     return <Badge className="bg-purple-500/20 text-purple-500 hover:bg-purple-500/30 border-0">
       {dreClass?.label || classification}
     </Badge>;
+  };
+
+  const openEditSheet = (category: Category) => {
+    setSelectedCategory(category);
+    setIsEditSheetOpen(true);
+  };
+
+  const closeEditSheet = () => {
+    setIsEditSheetOpen(false);
+    setSelectedCategory(null);
   };
   
   const filteredCategories = categories.filter(category => 
@@ -413,10 +423,7 @@ const Categorias = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => {
-                              setSelectedCategory(category);
-                              setIsEditSheetOpen(true);
-                            }}
+                            onClick={() => openEditSheet(category)}
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>
@@ -440,7 +447,7 @@ const Categorias = () => {
       
       {/* Create Category Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-[#1A1A1E] border-[#2A2A2E] text-white">
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Nova Categoria</DialogTitle>
             <DialogDescription>
@@ -454,7 +461,7 @@ const Categorias = () => {
               </Label>
               <Input
                 id="name"
-                className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]"
+                className="col-span-3"
                 value={newCategory.name}
                 onChange={(e) => setNewCategory({...newCategory, name: e.target.value})}
               />
@@ -467,7 +474,7 @@ const Categorias = () => {
                 value={newCategory.type} 
                 onValueChange={(value) => setNewCategory({...newCategory, type: value as "income" | "expense" | "investment"})}
               >
-                <SelectTrigger className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]">
+                <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="Selecione o tipo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -485,7 +492,7 @@ const Categorias = () => {
                 value={newCategory.dre_classification} 
                 onValueChange={(value) => setNewCategory({...newCategory, dre_classification: value})}
               >
-                <SelectTrigger className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]">
+                <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="Classificação DRE" />
                 </SelectTrigger>
                 <SelectContent>
@@ -528,7 +535,7 @@ const Categorias = () => {
       </Dialog>
       
       {/* Edit Category Sheet */}
-      <Sheet open={isEditSheetOpen && selectedCategory !== null} onOpenChange={setIsEditSheetOpen}>
+      <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
         <SheetContent className="sm:max-w-md">
           <SheetHeader>
             <SheetTitle>Editar Categoria</SheetTitle>
@@ -597,7 +604,7 @@ const Categorias = () => {
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-4">
-                <Button variant="outline" onClick={() => setIsEditSheetOpen(false)}>
+                <Button variant="outline" onClick={closeEditSheet}>
                   Cancelar
                 </Button>
                 <Button className="bg-fin-green text-black hover:bg-fin-green/90" onClick={handleUpdateCategory}>
