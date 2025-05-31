@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { MetricCard } from "@/components/dashboard/MetricCard";
@@ -36,6 +37,8 @@ interface FinancialData {
   paymentsReceived: number;
   pendingPayments: number;
   overduePayments: number;
+  totalIncome: number;
+  totalExpenses: number;
 }
 
 const Dashboard = () => {
@@ -56,7 +59,9 @@ const Dashboard = () => {
     clientsIncome: 0,
     paymentsReceived: 0,
     pendingPayments: 0,
-    overduePayments: 0
+    overduePayments: 0,
+    totalIncome: 0,
+    totalExpenses: 0
   });
 
   useEffect(() => {
@@ -71,14 +76,9 @@ const Dashboard = () => {
       
       const currentMonthStart = startOfMonth(new Date());
       const currentMonthEnd = endOfMonth(new Date());
-      const nextMonthStart = startOfMonth(addMonths(new Date(), 1));
-      const nextMonthEnd = endOfMonth(addMonths(new Date(), 1));
-      const prevMonthStart = startOfMonth(subMonths(new Date(), 1));
-      const prevMonthEnd = endOfMonth(subMonths(new Date(), 1));
-      
-      const currentDate = new Date();
       const now = new Date();
       
+      // Buscar todas as transações
       const { data: transactions, error: transactionsError } = await supabase
         .from('transactions')
         .select('*')
@@ -86,74 +86,15 @@ const Dashboard = () => {
       
       if (transactionsError) throw transactionsError;
       
-      const { data: originalPayments, error: paymentsError } = await supabase
+      // Buscar todos os pagamentos
+      const { data: payments, error: paymentsError } = await supabase
         .from('payments')
         .select('*')
-        .eq('user_id', user?.id)
-        .order('due_date', { ascending: true });
+        .eq('user_id', user?.id);
       
       if (paymentsError) throw paymentsError;
       
-      let processedPayments: Payment[] = [];
-      
-      if (originalPayments && originalPayments.length > 0) {
-        originalPayments.forEach(payment => {
-          processedPayments.push(payment as Payment);
-          
-          if (payment.recurrence && payment.recurrence !== 'once') {
-            const getMonthsToAdd = (recurrenceType: string) => {
-              switch (recurrenceType) {
-                case 'monthly': return 1;
-                case 'bimonthly': return 2;
-                case 'quarterly': return 3;
-                case 'biannual': return 6;
-                case 'annual': return 12;
-                default: return 0;
-              }
-            };
-            
-            const monthsToAdd = getMonthsToAdd(payment.recurrence);
-            
-            const getOccurrences = (recurrenceType: string) => {
-              switch (recurrenceType) {
-                case 'monthly': return 12;
-                case 'bimonthly': return 6;
-                case 'quarterly': return 4;
-                case 'biannual': return 2;
-                case 'annual': return 1;
-                default: return 0;
-              }
-            };
-            
-            const occurrences = getOccurrences(payment.recurrence);
-            
-            if (monthsToAdd > 0) {
-              const dueDate = new Date(payment.due_date);
-              
-              for (let i = 1; i <= occurrences; i++) {
-                const futureDueDate = addMonths(dueDate, monthsToAdd * i);
-                
-                if (isAfter(futureDueDate, currentDate)) {
-                  processedPayments.push({
-                    ...payment,
-                    id: `${payment.id}-occurrence-${i}`,
-                    due_date: futureDueDate.toISOString(),
-                    status: 'pending'
-                  } as Payment);
-                }
-              }
-            }
-          }
-        });
-      }
-      
-      const upcomingPayments = processedPayments
-        .filter(payment => payment.status === 'pending')
-        .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
-        .slice(0, 5);
-      
-      const allPayments = processedPayments;
-      
+      // Buscar clientes ativos
       const { data: clientsData, error: clientsError } = await supabase
         .from('clients')
         .select('*')
@@ -164,13 +105,28 @@ const Dashboard = () => {
       const clients = clientsData as Client[] || [];
       const activeClients = clients.filter(client => client.status === 'active');
       
+      // Calcular receitas totais (transações de entrada + receitas de clientes)
+      const incomeTransactions = transactions?.filter(tx => tx.type === 'income') || [];
+      const totalIncomeFromTransactions = incomeTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
+      
+      // Calcular despesas totais (transações de saída)
+      const expenseTransactions = transactions?.filter(tx => tx.type === 'expense') || [];
+      const totalExpenses = expenseTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
+      
+      // Calcular receitas mensais de clientes ativos
+      const monthlyClientsIncome = activeClients
+        .filter(client => 
+          client.recurring_payment && 
+          client.monthly_value && 
+          (!client.contract_end || new Date(client.contract_end) >= now)
+        )
+        .reduce((sum, client) => sum + (client.monthly_value || 0), 0);
+      
+      // Receitas e despesas do mês atual
       const currentMonthTransactions = transactions?.filter(tx => {
         const txDate = new Date(tx.date);
         return txDate >= currentMonthStart && txDate <= currentMonthEnd;
       }) || [];
-      
-      const incomeTransactions = transactions?.filter(tx => tx.type === 'income') || [];
-      const expenseTransactions = transactions?.filter(tx => tx.type === 'expense') || [];
       
       const currentMonthIncome = currentMonthTransactions
         .filter(tx => tx.type === 'income')
@@ -180,71 +136,65 @@ const Dashboard = () => {
         .filter(tx => tx.type === 'expense')
         .reduce((sum, tx) => sum + Number(tx.value), 0);
       
-      const totalIncome = incomeTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
-      const totalExpense = expenseTransactions.reduce((sum, tx) => sum + Number(tx.value), 0);
+      // Total de receitas (transações + clientes)
+      const totalIncome = totalIncomeFromTransactions + monthlyClientsIncome;
       
-      const monthlyClientIncome = activeClients
-        .filter(client => 
-          client.recurring_payment && 
-          client.monthly_value && 
-          (!client.contract_end || new Date(client.contract_end) >= currentDate)
+      // Saldo total real (receitas - despesas)
+      const totalBalance = totalIncome - totalExpenses;
+      
+      // Calcular pagamentos por status
+      const paymentsReceived = payments
+        ?.filter(payment => payment.status === 'completed')
+        .reduce((sum, payment) => sum + Number(payment.value), 0) || 0;
+      
+      const pendingPayments = payments
+        ?.filter(payment => 
+          payment.status === 'pending' && 
+          new Date(payment.due_date) >= now
         )
-        .reduce((sum, client) => sum + (client.monthly_value || 0), 0);
+        .reduce((sum, payment) => sum + Number(payment.value), 0) || 0;
       
-      const yearlyTransactionsForecast = (totalIncome / 12) * 12 - (totalExpense / 12) * 12;
-      const yearlyClientsIncome = monthlyClientIncome * 12;
-      const yearlyForecast = yearlyTransactionsForecast + yearlyClientsIncome;
+      const overduePayments = payments
+        ?.filter(payment => 
+          payment.status === 'pending' && 
+          new Date(payment.due_date) < now
+        )
+        .reduce((sum, payment) => sum + Number(payment.value), 0) || 0;
       
-      const nextMonthClientsIncome = activeClients
-        .filter(client => {
-          return client.recurring_payment && 
-                 client.monthly_value && 
-                 (!client.contract_end || new Date(client.contract_end) >= nextMonthEnd);
-        })
-        .reduce((sum, client) => sum + (client.monthly_value || 0), 0);
+      // Próximos pagamentos (5 primeiros pendentes)
+      const upcomingPayments = payments
+        ?.filter(payment => payment.status === 'pending')
+        .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
+        .slice(0, 5) || [];
       
-      const nextMonthForecast = currentMonthIncome + nextMonthClientsIncome - currentMonthExpense;
+      // Previsões baseadas em dados reais
+      const monthlyIncomeAverage = totalIncome / 12; // Média mensal baseada no total
+      const monthlyExpenseAverage = totalExpenses / 12; // Média mensal baseada no total
+      const yearlyForecast = (monthlyIncomeAverage * 12) - (monthlyExpenseAverage * 12);
+      const nextMonthForecast = monthlyIncomeAverage - monthlyExpenseAverage;
       
-      const taxPayable = (totalIncome + monthlyClientIncome) * 0.06;
+      // Impostos calculados sobre receita total (6%)
+      const taxPayable = totalIncome * 0.06;
       
-      const totalBalance = totalIncome - totalExpense + monthlyClientIncome;
-      
-      const paymentsReceived = allPayments
-        ? allPayments.filter(payment => payment.status === 'completed').reduce((sum, payment) => sum + Number(payment.value), 0)
-        : 0;
-      
-      const pendingPayments = allPayments
-        ? allPayments
-            .filter(payment => 
-              payment.status === 'pending' && 
-              new Date(payment.due_date) >= now
-            )
-            .reduce((sum, payment) => sum + Number(payment.value), 0)
-        : 0;
-      
-      const overduePayments = allPayments
-        ? allPayments
-            .filter(payment => 
-              payment.status === 'pending' && 
-              new Date(payment.due_date) < now
-            )
-            .reduce((sum, payment) => sum + Number(payment.value), 0)
-        : 0;
+      // Economias estimadas (20% do saldo positivo)
+      const totalSavings = totalBalance > 0 ? totalBalance * 0.2 : 0;
       
       setFinancialData({
         totalBalance,
-        monthlyIncome: currentMonthIncome + monthlyClientIncome,
+        monthlyIncome: currentMonthIncome + monthlyClientsIncome,
         monthlyExpense: currentMonthExpense,
-        totalSavings: totalBalance * 0.2,
+        totalSavings,
         yearlyForecast,
         nextMonthForecast,
         activeClients: activeClients.length,
         taxPayable,
         upcomingPayments: upcomingPayments as Payment[] || [],
-        clientsIncome: monthlyClientIncome,
+        clientsIncome: monthlyClientsIncome,
         paymentsReceived,
         pendingPayments,
-        overduePayments
+        overduePayments,
+        totalIncome,
+        totalExpenses
       });
     } catch (error: any) {
       console.error('Error fetching financial data:', error);
@@ -296,35 +246,36 @@ const Dashboard = () => {
             <MetricCard
               title="Saldo Total"
               value={formatCurrency(financialData.totalBalance)}
-              subtitle="Saldo atual"
+              subtitle={`Receitas: ${formatCurrency(financialData.totalIncome)} | Despesas: ${formatCurrency(financialData.totalExpenses)}`}
               icon="money"
+              trend={financialData.totalBalance >= 0 ? "up" : "down"}
             />
             <MetricCard
               title="Receita Mensal"
               value={formatCurrency(financialData.monthlyIncome)}
-              subtitle="Entradas deste mês"
+              subtitle={`Transações + Clientes (${financialData.activeClients} ativos)`}
               trend="up"
               icon="income"
             />
             <MetricCard
               title="Despesa Mensal"
               value={formatCurrency(financialData.monthlyExpense)}
-              subtitle="Saídas deste mês"
+              subtitle="Gastos do mês atual"
               trend="down"
               icon="expense"
             />
             <MetricCard
-              title="Total de Economias"
+              title="Meta de Economia"
               value={formatCurrency(financialData.totalSavings)}
-              subtitle="Meta de economia"
+              subtitle="20% do saldo positivo"
               icon="savings"
             />
           </div>
 
           <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
             <div className="mb-4">
-              <h3 className="text-lg text-gray-300 font-normal">Saldo Total vs Despesas</h3>
-              <p className="text-sm text-gray-400">Comparativo entre saldo e despesas</p>
+              <h3 className="text-lg text-gray-300 font-normal">Saldo Total vs Despesas Mensais</h3>
+              <p className="text-sm text-gray-400">Comparativo entre saldo total acumulado e despesas do mês</p>
             </div>
             <BalanceVsExpensesChart 
               totalBalance={financialData.totalBalance} 
@@ -335,7 +286,7 @@ const Dashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg text-gray-300 font-normal">Recebidos</h3>
+                <h3 className="text-lg text-gray-300 font-normal">Pagamentos Recebidos</h3>
                 <div className="h-14 w-14 rounded-full bg-fin-green/20 flex items-center justify-center">
                   <CheckCircle className="h-7 w-7 text-fin-green" />
                 </div>
@@ -344,13 +295,13 @@ const Dashboard = () => {
                 {formatCurrency(financialData.paymentsReceived)}
               </div>
               <div className="flex items-center text-sm">
-                <span className="text-gray-400">Pagamentos concluídos</span>
+                <span className="text-gray-400">Pagamentos confirmados</span>
               </div>
             </div>
             
             <div className="bg-[#1A1A1E] rounded-3xl p-6 shadow-md">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg text-gray-300 font-normal">Aguardando</h3>
+                <h3 className="text-lg text-gray-300 font-normal">Pendentes</h3>
                 <div className="h-14 w-14 rounded-full bg-[#FEC6A1]/20 flex items-center justify-center">
                   <Clock className="h-7 w-7 text-[#FEC6A1]" />
                 </div>
@@ -359,7 +310,7 @@ const Dashboard = () => {
                 {formatCurrency(financialData.pendingPayments)}
               </div>
               <div className="flex items-center text-sm">
-                <span className="text-gray-400">Pagamentos pendentes</span>
+                <span className="text-gray-400">Aguardando pagamento</span>
               </div>
             </div>
             
@@ -389,7 +340,7 @@ const Dashboard = () => {
               </div>
               <div className="fin-value">{formatCurrency(financialData.taxPayable)}</div>
               <div className="mt-2 text-sm text-fin-text-secondary">
-                Base de cálculo: {formatCurrency(financialData.totalBalance)}
+                Sobre receita total: {formatCurrency(financialData.totalIncome)}
               </div>
             </div>
 
@@ -398,7 +349,7 @@ const Dashboard = () => {
                 <h3 className="fin-card-title">Próximos Pagamentos</h3>
               </div>
               <div className="mb-2 text-sm text-fin-text-secondary">
-                Pagamentos programados para os próximos dias
+                Pagamentos programados por vencimento
               </div>
               {financialData.upcomingPayments.length > 0 ? (
                 <div className="space-y-2">
@@ -417,17 +368,14 @@ const Dashboard = () => {
                         </div>
                       </div>
                       <div className="font-semibold">
-                        {Number(payment.value).toLocaleString('pt-BR', { 
-                          style: 'currency', 
-                          currency: 'BRL' 
-                        })}
+                        {formatCurrency(Number(payment.value))}
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="h-32 flex items-center justify-center text-fin-text-secondary">
-                  Nenhum pagamento programado para os próximos dias.
+                  Nenhum pagamento programado.
                 </div>
               )}
               <div className="mt-4 flex justify-center">
@@ -445,31 +393,51 @@ const Dashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="fin-card">
               <div className="fin-card-header">
-                <h3 className="fin-card-title">Receita por Cliente</h3>
+                <h3 className="fin-card-title">Resumo Financeiro</h3>
                 <div className="fin-icon-wrapper fin-green-icon">
                   <CircleDollarSign size={20} />
                 </div>
               </div>
-              <div className="mb-2 text-sm text-fin-text-secondary">
-                Visão geral de receitas por cliente
-              </div>
-              <div className="h-64 flex items-center justify-center text-fin-text-secondary">
-                Gráfico de receitas por cliente será exibido aqui.
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-fin-text-secondary">Total de Receitas:</span>
+                  <span className="text-fin-green font-semibold">{formatCurrency(financialData.totalIncome)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-fin-text-secondary">Total de Despesas:</span>
+                  <span className="text-fin-red font-semibold">{formatCurrency(financialData.totalExpenses)}</span>
+                </div>
+                <div className="border-t border-[#2A2A2E] pt-2 flex justify-between">
+                  <span className="text-white font-medium">Resultado:</span>
+                  <span className={`font-bold ${financialData.totalBalance >= 0 ? 'text-fin-green' : 'text-fin-red'}`}>
+                    {formatCurrency(financialData.totalBalance)}
+                  </span>
+                </div>
               </div>
             </div>
 
             <div className="fin-card">
               <div className="fin-card-header">
-                <h3 className="fin-card-title">Receitas vs Despesas</h3>
+                <h3 className="fin-card-title">Clientes Ativos</h3>
                 <div className="fin-icon-wrapper fin-green-icon">
-                  <CreditCard size={20} />
+                  <Users size={20} />
                 </div>
               </div>
-              <div className="mb-2 text-sm text-fin-text-secondary">
-                Comparativo mensal de receitas e despesas
-              </div>
-              <div className="h-64 flex items-center justify-center text-fin-text-secondary">
-                Gráfico comparativo será exibido aqui.
+              <div className="text-4xl font-bold text-white mb-3">{financialData.activeClients}</div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-fin-text-secondary">Receita mensal:</span>
+                  <span className="text-fin-green">{formatCurrency(financialData.clientsIncome)}</span>
+                </div>
+                <div className="mt-2">
+                  <Button 
+                    variant="ghost" 
+                    className="text-fin-green p-0 h-auto"
+                    onClick={handleManageClients}
+                  >
+                    Gerenciar clientes
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -486,7 +454,7 @@ const Dashboard = () => {
               </div>
               <div className="fin-value">{formatCurrency(financialData.yearlyForecast)}</div>
               <div className="mt-2 text-sm text-fin-text-secondary">
-                Receitas {formatCurrency(financialData.monthlyIncome * 12)} vs Despesas {formatCurrency(financialData.monthlyExpense * 12)}
+                Baseado na média atual de receitas e despesas
               </div>
             </div>
 
@@ -499,29 +467,36 @@ const Dashboard = () => {
               </div>
               <div className="fin-value">{formatCurrency(financialData.nextMonthForecast)}</div>
               <div className="mt-2 text-sm text-fin-text-secondary">
-                Receitas {formatCurrency(financialData.monthlyIncome)} vs Despesas {formatCurrency(financialData.monthlyExpense)}
+                Projeção baseada em médias históricas
               </div>
             </div>
 
             <div className="fin-card">
               <div className="fin-card-header">
-                <h3 className="fin-card-title">Clientes Ativos</h3>
+                <h3 className="fin-card-title">Performance</h3>
                 <div className="fin-icon-wrapper fin-green-icon">
-                  <Users size={20} />
+                  <CreditCard size={20} />
                 </div>
               </div>
-              <div className="fin-value">{financialData.activeClients}</div>
-              <div className="mt-2 text-sm text-fin-text-secondary">
-                Receita mensal: {formatCurrency(financialData.clientsIncome)}
-              </div>
-              <div className="mt-2">
-                <Button 
-                  variant="ghost" 
-                  className="text-fin-green p-0 h-auto"
-                  onClick={handleManageClients}
-                >
-                  Gerenciar clientes
-                </Button>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-fin-text-secondary">Taxa de sucesso:</span>
+                  <span className="text-fin-green">
+                    {financialData.totalIncome > 0 ? 
+                      `${((financialData.paymentsReceived / (financialData.paymentsReceived + financialData.pendingPayments + financialData.overduePayments)) * 100 || 0).toFixed(1)}%` 
+                      : '0%'
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-fin-text-secondary">Margem de lucro:</span>
+                  <span className={financialData.totalIncome > 0 ? 'text-fin-green' : 'text-fin-red'}>
+                    {financialData.totalIncome > 0 ? 
+                      `${((financialData.totalBalance / financialData.totalIncome) * 100).toFixed(1)}%` 
+                      : '0%'
+                    }
+                  </span>
+                </div>
               </div>
             </div>
           </div>
