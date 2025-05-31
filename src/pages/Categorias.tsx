@@ -72,7 +72,7 @@ const CATEGORY_COLORS = [
 ];
 
 const DRE_CLASSIFICATIONS = [
-  { value: "", label: "Não classificado" },
+  { value: "nao_classificado", label: "Não classificado" },
   { value: "receita_bruta", label: "Receita Bruta" },
   { value: "deducoes", label: "Deduções" },
   { value: "custo_produtos_servicos", label: "Custo de Produtos/Serviços" },
@@ -98,7 +98,7 @@ const Categorias = () => {
     name: "",
     type: "expense" as "income" | "expense" | "investment",
     color: CATEGORY_COLORS[0].value,
-    dre_classification: ""
+    dre_classification: "nao_classificado"
   });
   
   useEffect(() => {
@@ -156,13 +156,15 @@ const Categorias = () => {
         return;
       }
       
+      const dreClassification = newCategory.dre_classification === "nao_classificado" ? null : newCategory.dre_classification;
+      
       const { error } = await supabase
         .from('categories')
         .insert({
           name: newCategory.name,
           type: newCategory.type,
           color: newCategory.color,
-          dre_classification: newCategory.dre_classification || null,
+          dre_classification: dreClassification,
           user_id: user.id
         });
       
@@ -172,7 +174,7 @@ const Categorias = () => {
         name: "",
         type: "expense",
         color: CATEGORY_COLORS[0].value,
-        dre_classification: ""
+        dre_classification: "nao_classificado"
       });
       
       setIsDialogOpen(false);
@@ -221,13 +223,15 @@ const Categorias = () => {
     try {
       if (!selectedCategory) return;
       
+      const dreClassification = selectedCategory.dre_classification === "nao_classificado" ? null : selectedCategory.dre_classification;
+      
       const { error } = await supabase
         .from('categories')
         .update({
           name: selectedCategory.name,
           type: selectedCategory.type,
           color: selectedCategory.color,
-          dre_classification: selectedCategory.dre_classification || null
+          dre_classification: dreClassification
         })
         .eq('id', selectedCategory.id);
       
@@ -265,7 +269,9 @@ const Categorias = () => {
   };
 
   const getDREClassificationLabel = (classification?: string) => {
-    if (!classification) return <Badge variant="secondary">Não classificado</Badge>;
+    if (!classification || classification === "nao_classificado") {
+      return <Badge variant="secondary">Não classificado</Badge>;
+    }
     
     const dreClass = DRE_CLASSIFICATIONS.find(c => c.value === classification);
     return <Badge className="bg-purple-500/20 text-purple-500 hover:bg-purple-500/30 border-0">
@@ -572,7 +578,7 @@ const Categorias = () => {
               <div className="space-y-2">
                 <Label htmlFor="edit-dre">Classificação DRE</Label>
                 <Select 
-                  value={selectedCategory.dre_classification || ""} 
+                  value={selectedCategory.dre_classification || "nao_classificado"} 
                   onValueChange={(value) => setSelectedCategory({...selectedCategory, dre_classification: value})}
                 >
                   <SelectTrigger>
