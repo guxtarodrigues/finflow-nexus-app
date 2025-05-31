@@ -1,4 +1,3 @@
-
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
@@ -19,7 +18,6 @@ import {
   Bell,
   ChevronRight,
   Inbox,
-  Package,
 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
@@ -69,11 +67,6 @@ export const Sidebar = () => {
           name: "Investimentos",
           path: "/investimentos",
           icon: <CircleDollarSign size={18} />,
-        },
-        {
-          name: "Produtos",
-          path: "/produtos",
-          icon: <Package size={18} />,
         },
       ],
     },

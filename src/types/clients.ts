@@ -1,22 +1,33 @@
 
 export interface Client {
   id: string;
-  user_id: string;
   name: string;
-  email?: string;
-  phone?: string;
-  description?: string;
-  status: "active" | "inactive" | "prospect";
-  product_id?: string;
-  recurring_payment?: boolean;
-  monthly_value?: number;
-  payment_due_day?: number;
-  contract_start?: string;
-  contract_end?: string;
+  email: string | null;
+  phone: string | null;
+  contract_start: string | null;
+  contract_end: string | null;
+  monthly_value: number | null;
+  status: 'active' | 'inactive' | null;
+  recurring_payment: boolean;
+  description: string | null;
+  user_id: string;
   created_at: string;
   updated_at: string;
-  products?: {
-    name: string;
-    price: number;
-  };
+  payment_status?: string | null;
+  last_payment_date?: string | null;
+}
+
+export interface NewClient {
+  name: string;
+  email: string | null;
+  phone: string | null;
+  contract_start: string | null;
+  contract_end: string | null;
+  monthly_value: number | null;
+  status: 'active' | 'inactive';
+  recurring_payment: boolean;
+  description: string | null;
+  user_id: string;
+  payment_status?: string | null;
+  last_payment_date?: string | null;
 }
