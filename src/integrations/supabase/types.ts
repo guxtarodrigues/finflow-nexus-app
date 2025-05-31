@@ -98,6 +98,7 @@ export type Database = {
           payment_due_day: number | null
           payment_status: string | null
           phone: string | null
+          product_id: string | null
           recurring_payment: boolean | null
           status: string | null
           updated_at: string
@@ -116,6 +117,7 @@ export type Database = {
           payment_due_day?: number | null
           payment_status?: string | null
           phone?: string | null
+          product_id?: string | null
           recurring_payment?: boolean | null
           status?: string | null
           updated_at?: string
@@ -134,12 +136,21 @@ export type Database = {
           payment_due_day?: number | null
           payment_status?: string | null
           phone?: string | null
+          product_id?: string | null
           recurring_payment?: boolean | null
           status?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clients_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       dre_snapshots: {
         Row: {
@@ -359,6 +370,48 @@ export type Database = {
           },
         ]
       }
+      products: {
+        Row: {
+          cost_percentage: number | null
+          created_at: string
+          description: string | null
+          financial_cost_percentage: number | null
+          id: string
+          name: string
+          operational_expense_percentage: number | null
+          price: number
+          tax_percentage: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cost_percentage?: number | null
+          created_at?: string
+          description?: string | null
+          financial_cost_percentage?: number | null
+          id?: string
+          name: string
+          operational_expense_percentage?: number | null
+          price?: number
+          tax_percentage?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cost_percentage?: number | null
+          created_at?: string
+          description?: string | null
+          financial_cost_percentage?: number | null
+          id?: string
+          name?: string
+          operational_expense_percentage?: number | null
+          price?: number
+          tax_percentage?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -403,6 +456,7 @@ export type Database = {
           due_date: string | null
           id: string
           payment_method: string | null
+          product_id: string | null
           recipient: string | null
           recurrence: string | null
           recurrence_count: number | null
@@ -422,6 +476,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           payment_method?: string | null
+          product_id?: string | null
           recipient?: string | null
           recurrence?: string | null
           recurrence_count?: number | null
@@ -441,6 +496,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           payment_method?: string | null
+          product_id?: string | null
           recipient?: string | null
           recurrence?: string | null
           recurrence_count?: number | null
@@ -465,6 +521,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "transactions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
@@ -472,7 +535,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calculate_product_costs: {
+        Args: { product_id: string; revenue_amount: number }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

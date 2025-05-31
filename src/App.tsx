@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import DRE from "./pages/DRE";
+import Produtos from "@/pages/Produtos";
 
 // New page imports
 import Analises from "./pages/Analises";
@@ -60,6 +61,8 @@ const App = () => {
                   <Route path="/metas" element={<Metas />} />
                   <Route path="/alertas" element={<Alertas />} />
                   <Route path="/configuracoes" element={<Configuracoes />} />
+                  
+                  <Route path="/produtos" element={<ProtectedRoute><Produtos /></ProtectedRoute>} />
                 </Route>
               </Route>
               
