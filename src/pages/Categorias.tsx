@@ -57,6 +57,7 @@ interface Category {
   type: "income" | "expense" | "investment";
   color: string;
   user_id: string;
+  dre_classification?: string;
   created_at: string;
   updated_at: string;
 }
@@ -69,6 +70,16 @@ const CATEGORY_COLORS = [
   { name: "Azul", value: "#3b82f6" },
   { name: "Roxo", value: "#a855f7" },
   { name: "Rosa", value: "#ec4899" },
+];
+
+const DRE_CLASSIFICATIONS = [
+  { value: "", label: "Não classificado" },
+  { value: "receita_bruta", label: "Receita Bruta" },
+  { value: "deducoes", label: "Deduções" },
+  { value: "custo_produtos_servicos", label: "Custo de Produtos/Serviços" },
+  { value: "despesas_operacionais", label: "Despesas Operacionais" },
+  { value: "resultado_financeiro", label: "Resultado Financeiro" },
+  { value: "impostos", label: "Impostos" },
 ];
 
 const Categorias = () => {
@@ -87,7 +98,8 @@ const Categorias = () => {
   const [newCategory, setNewCategory] = useState({
     name: "",
     type: "expense" as "income" | "expense" | "investment",
-    color: CATEGORY_COLORS[0].value
+    color: CATEGORY_COLORS[0].value,
+    dre_classification: ""
   });
   
   useEffect(() => {
@@ -151,6 +163,7 @@ const Categorias = () => {
           name: newCategory.name,
           type: newCategory.type,
           color: newCategory.color,
+          dre_classification: newCategory.dre_classification || null,
           user_id: user.id
         });
       
@@ -159,7 +172,8 @@ const Categorias = () => {
       setNewCategory({
         name: "",
         type: "expense",
-        color: CATEGORY_COLORS[0].value
+        color: CATEGORY_COLORS[0].value,
+        dre_classification: ""
       });
       
       setIsDialogOpen(false);
@@ -213,7 +227,8 @@ const Categorias = () => {
         .update({
           name: selectedCategory.name,
           type: selectedCategory.type,
-          color: selectedCategory.color
+          color: selectedCategory.color,
+          dre_classification: selectedCategory.dre_classification || null
         })
         .eq('id', selectedCategory.id);
       
@@ -248,6 +263,15 @@ const Categorias = () => {
         return null;
     }
   };
+
+  const getDREClassificationLabel = (classification?: string) => {
+    if (!classification) return <Badge variant="secondary">Não classificado</Badge>;
+    
+    const dreClass = DRE_CLASSIFICATIONS.find(c => c.value === classification);
+    return <Badge className="bg-purple-500/20 text-purple-500 hover:bg-purple-500/30 border-0">
+      {dreClass?.label || classification}
+    </Badge>;
+  };
   
   const filteredCategories = categories.filter(category => 
     category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -260,7 +284,7 @@ const Categorias = () => {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Categorias</h1>
           <p className="text-muted-foreground">
-            Gerenciamento de categorias para transações e pagamentos
+            Gerenciamento de categorias para transações e classificação DRE
           </p>
         </div>
         <Button onClick={() => setIsDialogOpen(true)} className="bg-fin-green text-black hover:bg-fin-green/90">
@@ -277,6 +301,32 @@ const Categorias = () => {
             <div className="flex items-center justify-between">
               <div className="text-2xl font-bold">{activeCategories}</div>
               <Database className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-normal">Classificadas para DRE</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="text-2xl font-bold">
+                {categories.filter(c => c.dre_classification).length}
+              </div>
+              <Tag className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-normal">Não Classificadas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="text-2xl font-bold text-yellow-600">
+                {categories.filter(c => !c.dre_classification).length}
+              </div>
+              <Tag className="h-8 w-8 text-yellow-600" />
             </div>
           </CardContent>
         </Card>
@@ -342,6 +392,7 @@ const Categorias = () => {
                     <TableHead className="w-12">Cor</TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>Tipo</TableHead>
+                    <TableHead>Classificação DRE</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -356,6 +407,7 @@ const Categorias = () => {
                       </TableCell>
                       <TableCell className="font-medium">{category.name}</TableCell>
                       <TableCell>{getCategoryTypeLabel(category.type)}</TableCell>
+                      <TableCell>{getDREClassificationLabel(category.dre_classification)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button
@@ -392,7 +444,7 @@ const Categorias = () => {
           <DialogHeader>
             <DialogTitle>Nova Categoria</DialogTitle>
             <DialogDescription>
-              Adicione uma nova categoria para organizar suas finanças.
+              Adicione uma nova categoria e classifique-a para o DRE.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -422,6 +474,26 @@ const Categorias = () => {
                   <SelectItem value="income">Receita</SelectItem>
                   <SelectItem value="expense">Despesa</SelectItem>
                   <SelectItem value="investment">Investimento</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="dre_classification" className="text-right">
+                DRE
+              </Label>
+              <Select 
+                value={newCategory.dre_classification} 
+                onValueChange={(value) => setNewCategory({...newCategory, dre_classification: value})}
+              >
+                <SelectTrigger className="col-span-3 bg-[#1F1F23] border-[#2A2A2E]">
+                  <SelectValue placeholder="Classificação DRE" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DRE_CLASSIFICATIONS.map((classification) => (
+                    <SelectItem key={classification.value} value={classification.value}>
+                      {classification.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -461,7 +533,7 @@ const Categorias = () => {
           <SheetHeader>
             <SheetTitle>Editar Categoria</SheetTitle>
             <SheetDescription>
-              Atualize os dados da categoria selecionada.
+              Atualize os dados da categoria e sua classificação DRE.
             </SheetDescription>
           </SheetHeader>
           {selectedCategory && (
@@ -487,6 +559,24 @@ const Categorias = () => {
                     <SelectItem value="income">Receita</SelectItem>
                     <SelectItem value="expense">Despesa</SelectItem>
                     <SelectItem value="investment">Investimento</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-dre">Classificação DRE</Label>
+                <Select 
+                  value={selectedCategory.dre_classification || ""} 
+                  onValueChange={(value) => setSelectedCategory({...selectedCategory, dre_classification: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Classificação DRE" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DRE_CLASSIFICATIONS.map((classification) => (
+                      <SelectItem key={classification.value} value={classification.value}>
+                        {classification.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
