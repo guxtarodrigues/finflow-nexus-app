@@ -518,11 +518,11 @@ const Dashboard = () => {
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-fin-text-secondary">Total de Receitas:</span>
-                  <span className="text-fin-green font-semibold">{formatCurrency(financialData.totalIncome)}</span>
+                  <span className="text-fin-green font-semibold">{formatCurrency(financialData.monthlyIncome)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-fin-text-secondary">Total de Despesas:</span>
-                  <span className="text-fin-red font-semibold">{formatCurrency(financialData.totalExpenses)}</span>
+                  <span className="text-fin-red font-semibold">{formatCurrency(financialData.monthlyExpense)}</span>
                 </div>
                 <div className="border-t border-[#2A2A2E] pt-2 flex justify-between">
                   <span className="text-white font-medium">Resultado:</span>
@@ -599,7 +599,7 @@ const Dashboard = () => {
                 <div className="flex justify-between text-sm">
                   <span className="text-fin-text-secondary">Taxa de sucesso:</span>
                   <span className="text-fin-green">
-                    {financialData.totalIncome > 0 ? 
+                    {financialData.monthlyIncome > 0 ? 
                       `${((financialData.paymentsReceived / (financialData.paymentsReceived + financialData.pendingPayments + financialData.overduePayments)) * 100 || 0).toFixed(1)}%` 
                       : '0%'
                     }
@@ -607,9 +607,9 @@ const Dashboard = () => {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-fin-text-secondary">Margem de lucro:</span>
-                  <span className={financialData.totalIncome > 0 ? 'text-fin-green' : 'text-fin-red'}>
-                    {financialData.totalIncome > 0 ? 
-                      `${((financialData.totalBalance / financialData.totalIncome) * 100).toFixed(1)}%` 
+                  <span className={financialData.monthlyIncome > 0 ? 'text-fin-green' : 'text-fin-red'}>
+                    {financialData.monthlyIncome > 0 ? 
+                      `${((financialData.totalBalance / financialData.monthlyIncome) * 100).toFixed(1)}%` 
                       : '0%'
                     }
                   </span>
