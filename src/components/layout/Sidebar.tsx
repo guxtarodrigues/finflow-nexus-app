@@ -1,3 +1,4 @@
+
 import {
   LayoutDashboard,
   Settings,
@@ -11,6 +12,7 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { MainNav } from "@/components/main-nav"
 import { SidebarNavItem } from "@/components/sidebar/sidebar-nav-item"
 import { useAuth } from "@/contexts/AuthContext"
+import { Button } from "@/components/ui/button"
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
   className?: string
@@ -19,7 +21,7 @@ interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
 export function Sidebar({ className, ...props }: SidebarProps) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const { logout } = useAuth()
+  const { signOut } = useAuth()
 
   const navigation = [
     {
@@ -75,8 +77,8 @@ export function Sidebar({ className, ...props }: SidebarProps) {
           size="sm"
           className="w-full"
           onClick={() => {
-            logout()
-            navigate("/login")
+            signOut()
+            navigate("/auth")
           }}
         >
           Sair
@@ -85,5 +87,3 @@ export function Sidebar({ className, ...props }: SidebarProps) {
     </div>
   )
 }
-
-import { Button } from "@/components/ui/button"
