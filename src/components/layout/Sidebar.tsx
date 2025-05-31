@@ -71,6 +71,12 @@ export const Sidebar = () => {
       ],
     },
     {
+      name: "DRE",
+      path: "/dre",
+      icon: <FileText size={20} />,
+      expanded: false,
+    },
+    {
       name: "Análises",
       path: "/analises",
       icon: <BarChart size={20} />,
