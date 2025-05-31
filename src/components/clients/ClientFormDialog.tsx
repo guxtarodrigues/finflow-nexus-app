@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -240,7 +239,7 @@ export const ClientFormDialog = ({ client, isOpen, onClose, onSuccess }: ClientF
                 <SelectValue placeholder="Selecione um produto (opcional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Nenhum produto</SelectItem>
+                <SelectItem value="none">Nenhum produto</SelectItem>
                 {products.map((product) => (
                   <SelectItem key={product.id} value={product.id}>
                     {product.name} - R$ {product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}

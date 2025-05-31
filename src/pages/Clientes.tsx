@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,7 +38,15 @@ const Clientes = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setClients(data || []);
+      
+      // Ensure status values are properly typed
+      const typedClients = (data || []).map(client => ({
+        ...client,
+        status: client.status === 'prospect' ? 'prospect' : 
+                client.status === 'inactive' ? 'inactive' : 'active'
+      })) as Client[];
+      
+      setClients(typedClients);
     } catch (error: any) {
       console.error('Error fetching clients:', error);
       toast({
@@ -85,6 +92,31 @@ const Clientes = () => {
   const handleDialogClose = () => {
     setIsDialogOpen(false);
     setEditingClient(null);
+  };
+
+  const handleStatusChange = async (clientId: string, newStatus: 'active' | 'inactive' | 'prospect') => {
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .update({ status: newStatus })
+        .eq('id', clientId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Status atualizado com sucesso!",
+        description: "O status do cliente foi alterado."
+      });
+
+      fetchClients();
+    } catch (error: any) {
+      console.error('Error updating client status:', error);
+      toast({
+        title: "Erro ao atualizar status",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
   };
 
   const filteredClients = clients.filter(client =>
@@ -201,6 +233,7 @@ const Clientes = () => {
                 client={client}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                onStatusChange={handleStatusChange}
               />
             ))
           )}
